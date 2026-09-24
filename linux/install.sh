@@ -17,7 +17,7 @@ while [ $# -gt 0 ]; do
             PREFIX="${1:?--prefix requires a directory}"
             ;;
         -h | --help)
-            sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'
+            awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "$0"
             exit 0
             ;;
         *)

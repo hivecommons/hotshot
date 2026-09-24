@@ -32,7 +32,7 @@ while [ $# -gt 0 ]; do
             SHOT_DIR="${1:?--dir requires a directory argument}"
             ;;
         -h | --help)
-            sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
+            awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "$0"
             exit 0
             ;;
         *)

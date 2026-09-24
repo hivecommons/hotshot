@@ -9,4 +9,4 @@ permissions:
 
 jobs:
   assignment-helper:
-    uses: hivecommons/infra/.github/workflows/reusable-assignment-helper.yml@main
+    uses: hivecommons/infra/.github/workflows/reusable-assignment-helper.yml@1416d68a1fd5bd475b96c8ddfcffc8539bfa6b08  # hivecommons/infra main pinned 2026-09-24

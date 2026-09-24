@@ -11,5 +11,4 @@ permissions:
 
 jobs:
   verify:
-    uses: hivecommons/infra/.github/workflows/reusable-pr-verifier.yml@main
-    secrets: inherit
+    uses: hivecommons/infra/.github/workflows/reusable-pr-verifier.yml@1416d68a1fd5bd475b96c8ddfcffc8539bfa6b08  # hivecommons/infra main pinned 2026-09-24

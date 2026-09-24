@@ -752,12 +752,12 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func classifyCommands(_ commands: [String]) -> TargetCLI? {
         var sawPlainPathCLI = false
         for cmd in commands {
-            // First token of the command line, basename only.
-            let first = cmd.split(separator: " ").first.map(String.init) ?? cmd
-            let name = (first as NSString).lastPathComponent.lowercased()
-            if name == "claude" { return .claude }
-            if name == "copilot" || name == "aider" || name == "opencode" {
-                sawPlainPathCLI = true
+            for token in cmd.split(separator: " ") {
+                let name = (String(token) as NSString).lastPathComponent.lowercased()
+                if name == "claude" { return .claude }
+                if name == "copilot" || name == "aider" || name == "opencode" {
+                    sawPlainPathCLI = true
+                }
             }
         }
         return sawPlainPathCLI ? .plainPath : nil
@@ -894,8 +894,10 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func showNotification(title: String, body: String) {
         guard notifications else { return }
+        let escapedTitle = appleScriptEscaped(title)
+        let escapedBody = appleScriptEscaped(body)
         let script = """
-            display notification "\(body)" with title "\(title)"
+            display notification "\(escapedBody)" with title "\(escapedTitle)"
             """
         runAppleScript(script)
     }

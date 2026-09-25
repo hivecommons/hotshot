@@ -246,6 +246,168 @@ assert_eq "e2e capture failure: exit 1" "1" "$rc"
 check "e2e capture failure: nothing typed" $?
 mv "$STUBS/maim.ok" "$STUBS/maim"
 
+# X11 fallback: no maim on PATH -> scrot captures instead.
+SCROTSTUBS="$TMP/scrotstubs"
+mkdir -p "$SCROTSTUBS"
+cp "$STUBS/xclip" "$STUBS/xdotool" "$SCROTSTUBS/"
+cat >"$SCROTSTUBS/scrot" <<'EOF'
+#!/usr/bin/env bash
+for out in "$@"; do :; done
+printf 'PNG' >"$out"
+EOF
+chmod +x "$SCROTSTUBS"/*
+root="$(spawn_tree claude)"
+rm -f "$TYPELOG" "$CLIPLOG"
+shot="$(env -i HOME="$HOME" DISPLAY=:99 PATH="$SCROTSTUBS:/usr/bin:/bin" \
+    HOTSHOT_DIR="$TMP/shots" HOTSHOT_TEST_FOCUS_PID="$root" \
+    bash "$SCRIPT" --full)"
+rc=$?
+assert_eq "e2e scrot fallback: exit 0" "0" "$rc"
+[ -s "$shot" ]
+check "e2e scrot fallback: screenshot created via scrot" $?
+assert_eq "e2e scrot fallback: typed bracketed path" "[$shot] " "$(cat "$TYPELOG")"
+
+# ==============================================================================
+# end-to-end on a fake Wayland session (stubbed grim/slurp/wl-copy/wtype,
+# focus detection via a stubbed sway IPC + real jq)
+# ==============================================================================
+WSTUBS="$TMP/wstubs"
+mkdir -p "$WSTUBS"
+GRIMLOG="$TMP/grim.log"
+
+cat >"$WSTUBS/grim" <<EOF
+#!/usr/bin/env bash
+echo "\$@" >>"$GRIMLOG"
+for out in "\$@"; do :; done
+printf 'PNG' >"\$out"
+EOF
+
+cat >"$WSTUBS/slurp" <<'EOF'
+#!/usr/bin/env bash
+echo "10,20 300x200"
+EOF
+
+cat >"$WSTUBS/wl-copy" <<EOF
+#!/usr/bin/env bash
+cat >/dev/null
+echo "\$@" >>"$CLIPLOG"
+EOF
+
+cat >"$WSTUBS/wtype" <<EOF
+#!/usr/bin/env bash
+while [ "\$1" != "--" ]; do shift; done
+shift
+printf '%s' "\$*" >>"$TYPELOG"
+EOF
+
+# sway IPC: report the test-chosen pid as the focused window.
+cat >"$WSTUBS/swaymsg" <<'EOF'
+#!/usr/bin/env bash
+printf '{"nodes":[{"focused":true,"pid":%s}]}\n' "${HOTSHOT_TEST_FOCUS_PID:?}"
+EOF
+chmod +x "$WSTUBS"/*
+
+run_e2e_wayland() { # $1 = focus pid; remaining args passed to the script
+    local focus="$1"
+    shift
+    rm -f "$TYPELOG" "$CLIPLOG" "$GRIMLOG"
+    env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+        PATH="$WSTUBS:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
+        HOTSHOT_TEST_FOCUS_PID="$focus" \
+        bash "$SCRIPT" "$@"
+}
+
+# Focused sway window runs claude -> bracketed path typed via wtype.
+root="$(spawn_tree claude)"
+shot="$(run_e2e_wayland "$root" --full 2>"$TMP/we2e.err")"
+rc=$?
+assert_eq "e2e wayland claude: exit 0" "0" "$rc"
+[ -s "$shot" ]
+check "e2e wayland claude: screenshot file created and echoed" $?
+assert_eq "e2e wayland claude: typed bracketed path" "[$shot] " "$(cat "$TYPELOG")"
+grep -q -- "--type image/png" "$CLIPLOG"
+check "e2e wayland claude: clipboard loaded via wl-copy image/png" $?
+
+# Focused sway window runs copilot -> escaped bare path typed.
+root="$(spawn_tree copilot)"
+mkdir -p "$TMP/wayland spaced"
+shot="$(run_e2e_wayland "$root" --full --dir "$TMP/wayland spaced")"
+rc=$?
+assert_eq "e2e wayland copilot: exit 0" "0" "$rc"
+esc="$(shell_escape "$shot")"
+assert_eq "e2e wayland copilot: typed escaped bare path" "$esc " "$(cat "$TYPELOG")"
+
+# Region capture -> slurp geometry is passed to grim -g.
+root="$(spawn_tree claude)"
+shot="$(run_e2e_wayland "$root" --region)"
+rc=$?
+assert_eq "e2e wayland region: exit 0" "0" "$rc"
+grep -q -- "-g 10,20 300x200" "$GRIMLOG"
+check "e2e wayland region: slurp geometry forwarded to grim -g" $?
+
+# Cancelled slurp (user hit Escape) -> die, nothing typed or captured.
+cat >"$WSTUBS/slurp.ok" <<'EOF'
+#!/usr/bin/env bash
+echo "10,20 300x200"
+EOF
+chmod +x "$WSTUBS/slurp.ok"
+cat >"$WSTUBS/slurp" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+run_e2e_wayland "$plain_root" --region >/dev/null 2>&1
+rc=$?
+assert_eq "e2e wayland cancelled slurp: exit 1" "1" "$rc"
+[ ! -e "$TYPELOG" ]
+check "e2e wayland cancelled slurp: nothing typed" $?
+mv "$WSTUBS/slurp.ok" "$WSTUBS/slurp"
+
+# No grim on PATH -> die with install hint.
+NOGRIM="$TMP/nogrim"
+mkdir -p "$NOGRIM"
+out="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 PATH="$NOGRIM:/usr/bin:/bin" \
+    HOTSHOT_DIR="$TMP/wshots" bash "$SCRIPT" --full 2>&1)"
+rc=$?
+assert_eq "e2e wayland no grim: exit 1" "1" "$rc"
+case "$out" in *"install 'grim'"*) check "e2e wayland no grim: message names grim" 0 ;; *) check "e2e wayland no grim: message names grim" 1 ;; esac
+
+# wtype missing -> ydotool fallback types the text.
+mkdir -p "$TMP/ydostubs"
+cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wl-copy" "$WSTUBS/swaymsg" "$TMP/ydostubs/"
+cat >"$TMP/ydostubs/ydotool" <<EOF
+#!/usr/bin/env bash
+while [ "\$1" != "--" ]; do shift; done
+shift
+printf '%s' "\$*" >>"$TYPELOG"
+EOF
+chmod +x "$TMP/ydostubs"/*
+root="$(spawn_tree claude)"
+rm -f "$TYPELOG" "$CLIPLOG" "$GRIMLOG"
+shot="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+    PATH="$TMP/ydostubs:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
+    HOTSHOT_TEST_FOCUS_PID="$root" bash "$SCRIPT" --full)"
+rc=$?
+assert_eq "e2e wayland ydotool fallback: exit 0" "0" "$rc"
+assert_eq "e2e wayland ydotool fallback: typed bracketed path" "[$shot] " "$(cat "$TYPELOG")"
+
+# Hyprland focus detection: hyprctl activewindow -j supplies the pid.
+HYPRSTUBS="$TMP/hyprstubs"
+mkdir -p "$HYPRSTUBS"
+cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wl-copy" "$WSTUBS/wtype" "$HYPRSTUBS/"
+cat >"$HYPRSTUBS/hyprctl" <<'EOF'
+#!/usr/bin/env bash
+printf '{"pid":%s}\n' "${HOTSHOT_TEST_FOCUS_PID:?}"
+EOF
+chmod +x "$HYPRSTUBS"/*
+root="$(spawn_tree copilot)"
+rm -f "$TYPELOG" "$CLIPLOG" "$GRIMLOG"
+shot="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 HYPRLAND_INSTANCE_SIGNATURE=test \
+    PATH="$HYPRSTUBS:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
+    HOTSHOT_TEST_FOCUS_PID="$root" bash "$SCRIPT" --full)"
+rc=$?
+assert_eq "e2e hyprland copilot: exit 0" "0" "$rc"
+assert_eq "e2e hyprland copilot: typed escaped bare path" "$(shell_escape "$shot") " "$(cat "$TYPELOG")"
+
 # ==============================================================================
 echo
 echo "$PASS passed, $FAIL failed"

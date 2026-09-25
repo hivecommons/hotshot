@@ -1,52 +1,5 @@
 import AppKit
-
-// MARK: - Constants
-
-let TERMINAL_BUNDLE_IDS: Set<String> = [
-    "com.googlecode.iterm2",
-    "com.apple.Terminal",
-    "net.kovidgoyal.kitty",
-    "io.alacritty",
-    "dev.warp.Warp-Stable",
-    "com.mitchellh.ghostty",
-]
-let REFOCUS_DELAY_SECONDS = 0.3
-
-// MARK: - Preferences keys
-
-let PREF_AUTO_FOCUS = "hotshotAutoFocus"
-let PREF_AUTO_RETURN = "hotshotAutoReturn"
-let PREF_NOTIFICATIONS = "hotshotNotifications"
-let PREF_AUTO_WATCH = "hotshotAutoWatch"
-let PREF_CLIPBOARD_WATCH = "hotshotClipboardWatch"
-let SCREENSHOT_EXTENSIONS: Set<String> = ["png", "jpg", "jpeg", "tiff", "bmp", "gif", "webp"]
-let WATCH_DEBOUNCE_SECONDS = 1.5
-let WATCH_FILE_AGE_MAX_SECONDS = 10.0
-let CLIPBOARD_POLL_INTERVAL_SECONDS = 0.5
-let PREF_SCREENSHOT_DIR = "hotshotScreenshotDir"
-
-func macOSScreenshotLocation() -> String {
-    let task = Process()
-    task.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
-    task.arguments = ["read", "com.apple.screencapture", "location"]
-    let pipe = Pipe()
-    task.standardOutput = pipe
-    task.standardError = Pipe()
-    do {
-        try task.run()
-        task.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-            !path.isEmpty
-        {
-            // The default may be stored with a literal tilde (e.g. "~/Downloads");
-            // screencaptureui resolves it, but a raw file watcher on the
-            // unexpanded string silently watches a nonexistent path.
-            return (path as NSString).expandingTildeInPath
-        }
-    } catch {}
-    return NSHomeDirectory() + "/Desktop"
-}
+import HotshotCore
 
 // MARK: - App Delegate
 
@@ -491,40 +444,6 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Screenshot Folder Watcher
 
-    func findMostRecentScreenshot(in dir: String) -> String? {
-        let fm = FileManager.default
-        guard let files = try? fm.contentsOfDirectory(atPath: dir) else { return nil }
-
-        var newest: String?
-        var newestDate = Date.distantPast
-
-        for file in files {
-            let ext = (file as NSString).pathExtension.lowercased()
-            guard SCREENSHOT_EXTENSIONS.contains(ext) else { continue }
-            let fullPath = (dir as NSString).appendingPathComponent(file)
-            guard let attrs = try? fm.attributesOfItem(atPath: fullPath),
-                  let modified = attrs[.modificationDate] as? Date else { continue }
-            if modified > newestDate {
-                newestDate = modified
-                newest = fullPath
-            }
-        }
-        return newest
-    }
-
-    func snapshotScreenshotFiles(in dir: String) -> Set<String> {
-        let fm = FileManager.default
-        guard let files = try? fm.contentsOfDirectory(atPath: dir) else { return [] }
-        var result = Set<String>()
-        for file in files {
-            let ext = (file as NSString).pathExtension.lowercased()
-            if SCREENSHOT_EXTENSIONS.contains(ext) {
-                result.insert(file)
-            }
-        }
-        return result
-    }
-
     func startWatchingScreenshots() {
         stopWatchingScreenshots()
 
@@ -683,29 +602,6 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Path Injection
 
-    /// Backslash-escape a path the way Terminal does on drag-and-drop, so
-    /// CLIs that parse bare paths (GitHub Copilot CLI, aider, ...) accept it.
-    /// Claude Code accepts the same escaped form, so no brackets are needed.
-    func shellEscapedPath(_ path: String) -> String {
-        let specials: Set<Character> = [
-            " ", "\t", "!", "\"", "#", "$", "&", "'", "(", ")", "*",
-            ",", ";", "<", ">", "?", "[", "]", "\\", "^", "`", "{", "}", "|",
-        ]
-        var out = ""
-        for ch in path {
-            if specials.contains(ch) { out.append("\\") }
-            out.append(ch)
-        }
-        return out
-    }
-
-    // MARK: - CLI Detection
-
-    enum TargetCLI {
-        case claude  // expects "[path] " bracketed form
-        case plainPath  // GitHub Copilot CLI, aider, ... expect a bare escaped path
-    }
-
     /// AppleScript expression returning the tty of the terminal's focused
     /// session, per terminal app. Returns nil for terminals without
     /// scriptable tty access.
@@ -745,22 +641,6 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } catch {
             return []
         }
-    }
-
-    /// Classify the commands running on a tty. Claude wins ties since the
-    /// bracketed form was hotshot's historical default.
-    func classifyCommands(_ commands: [String]) -> TargetCLI? {
-        var sawPlainPathCLI = false
-        for cmd in commands {
-            for token in cmd.split(separator: " ") {
-                let name = (String(token) as NSString).lastPathComponent.lowercased()
-                if name == "claude" { return .claude }
-                if name == "copilot" || name == "aider" || name == "opencode" {
-                    sawPlainPathCLI = true
-                }
-            }
-        }
-        return sawPlainPathCLI ? .plainPath : nil
     }
 
     /// Detect which CLI is running in the target terminal's focused session.
@@ -803,14 +683,6 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         default:
             return injectViaGenericAppleScript(text, bundleID: bid)
         }
-    }
-
-    /// Escape a string for embedding in an AppleScript double-quoted literal.
-    /// Backslashes must be escaped first so shell-escaped paths survive intact.
-    func appleScriptEscaped(_ s: String) -> String {
-        return s
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
     }
 
     func injectViaITerm2(_ path: String) -> Bool {

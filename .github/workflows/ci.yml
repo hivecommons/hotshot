@@ -15,11 +15,11 @@ concurrency:
 jobs:
   swift-build:
     name: Swift build (macOS)
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Build
-        run: swift build
+      - name: Test
+        run: swift test
 
   shellcheck:
     name: ShellCheck (Linux scripts)
@@ -49,3 +49,14 @@ jobs:
           $r = Invoke-ScriptAnalyzer -Path windows -Recurse -Severity Error
           $r | Format-Table -AutoSize
           if ($r) { exit 1 }
+
+  pester:
+    name: Pester (Windows script unit tests)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Run Pester tests
+        shell: pwsh
+        run: |
+          Install-Module Pester -Force -Scope CurrentUser
+          Invoke-Pester -Path windows/tests -CI

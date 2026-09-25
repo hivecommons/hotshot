@@ -21,6 +21,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'HotshotCapture.psm1') -Force
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
@@ -76,57 +77,16 @@ try {
 }
 
 # --- 3. CLI detection ----------------------------------------------------------
-# Walk descendant processes of the focused terminal (Windows Terminal, conhost,
-# etc.) and classify the AI CLI, mirroring the macOS `ps -t <tty>` inspection.
-function Get-TargetCli([uint32]$rootPid) {
-    if (-not $rootPid) { return 'unknown' }
-    $all = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-        Select-Object ProcessId, ParentProcessId, Name, CommandLine
-    if (-not $all) { return 'unknown' }
-    $byParent = $all | Group-Object ParentProcessId -AsHashTable -AsString
-
-    $sawPlain = $false
-    $queue = [System.Collections.Generic.Queue[uint32]]::new()
-    $queue.Enqueue($rootPid)
-    $seen = @{}
-    while ($queue.Count -gt 0) {
-        $p = $queue.Dequeue()
-        if ($seen.ContainsKey($p)) { continue }
-        $seen[$p] = $true
-        $proc = $all | Where-Object { $_.ProcessId -eq $p }
-        foreach ($pr in $proc) {
-            $name = if ($pr.Name) { $pr.Name.ToLower() } else { '' }
-            $cmd = if ($pr.CommandLine) { $pr.CommandLine.ToLower() } else { '' }
-            if ($name -eq 'claude.exe' -or $cmd -match '[\\/ "]claude(-code)?(\.\w+)?("|[\\/ ]|$)') { return 'claude' }
-            if ($name -in @('copilot.exe', 'aider.exe', 'opencode.exe') -or
-                $cmd -match '[\\/ "](copilot|aider|opencode)(\.\w+)?("|[\\/ ]|$)') { $sawPlain = $true }
-        }
-        $kids = $byParent["$p"]
-        if ($kids) { foreach ($k in $kids) { $queue.Enqueue([uint32]$k.ProcessId) } }
-    }
-    if ($sawPlain) { return 'plain' } else { return 'unknown' }
-}
-
 $cli = Get-TargetCli $termPid
 
-switch ($cli) {
-    'plain' {
-        # Windows shells take a double-quoted path; quote only when needed.
-        if ($shotPath -match '[\s]') { $text = '"' + $shotPath + '" ' }
-        else { $text = $shotPath + ' ' }
-    }
-    default { $text = "[$shotPath] " }
-}
+$text = Get-HotshotTypedText -ShotPath $shotPath -Cli $cli
 
 # --- 4. typed injection ---------------------------------------------------------
 if (-not $NoType) {
     if ($termHwnd -ne [IntPtr]::Zero) {
         [void][Hotshot.Native]::SetForegroundWindow($termHwnd)
         Start-Sleep -Milliseconds 300
-        # Escape SendKeys metacharacters: + ^ % ~ ( ) { } [ ]
-        $escaped = ($text.ToCharArray() | ForEach-Object {
-                if ($_ -in '+', '^', '%', '~', '(', ')', '{', '}', '[', ']') { "{$_}" } else { "$_" }
-            }) -join ''
+        $escaped = ConvertTo-SendKeysEscaped -Text $text
         try {
             [System.Windows.Forms.SendKeys]::SendWait($escaped)
         } catch {

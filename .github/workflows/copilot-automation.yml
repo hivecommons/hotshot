@@ -22,6 +22,11 @@ concurrency:
 
 jobs:
   copilot-automation:
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      statuses: write
     uses: hivecommons/infra/.github/workflows/reusable-copilot-automation.yml@1416d68a1fd5bd475b96c8ddfcffc8539bfa6b08  # hivecommons/infra main pinned 2026-09-24
     with:
       pr_number: ${{ github.event.inputs.pr_number || '' }}

@@ -122,10 +122,39 @@ public func classifyCommands(_ commands: [String]) -> TargetCLI? {
     return sawPlainPathCLI ? .plainPath : nil
 }
 
+/// True when the string contains control characters (U+0000–U+001F, U+007F)
+/// or Unicode line/paragraph separators. macOS filenames may contain CR/LF;
+/// typing such a name into a terminal presses Return mid-string, so paths
+/// containing these characters must never be injected.
+public func containsControlCharacters(_ s: String) -> Bool {
+    for scalar in s.unicodeScalars {
+        if scalar.value < 0x20 || scalar.value == 0x7F
+            || scalar.value == 0x2028 || scalar.value == 0x2029
+        {
+            return true
+        }
+    }
+    return false
+}
+
 /// Escape a string for embedding in an AppleScript double-quoted literal.
 /// Backslashes must be escaped first so shell-escaped paths survive intact.
+/// CR/LF/TAB become AppleScript escapes and any remaining control character
+/// is dropped, so untrusted text can never break out of the literal or emit
+/// a Return keystroke.
 public func appleScriptEscaped(_ s: String) -> String {
-    return s
+    let base = s
         .replacingOccurrences(of: "\\", with: "\\\\")
         .replacingOccurrences(of: "\"", with: "\\\"")
+        .replacingOccurrences(of: "\r", with: "\\r")
+        .replacingOccurrences(of: "\n", with: "\\n")
+        .replacingOccurrences(of: "\t", with: "\\t")
+    var out = String.UnicodeScalarView()
+    for scalar in base.unicodeScalars
+    where !(scalar.value < 0x20 || scalar.value == 0x7F
+        || scalar.value == 0x2028 || scalar.value == 0x2029)
+    {
+        out.append(scalar)
+    }
+    return String(out)
 }

@@ -662,6 +662,16 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @discardableResult
     func injectPath(_ path: String, terminalBundleID bid: String) -> Bool {
+        // Never type a path containing control characters: macOS filenames
+        // may embed CR/LF, and a Return keystroke mid-path would execute
+        // attacker-chosen text as a command in the target terminal.
+        guard !containsControlCharacters(path) else {
+            NSLog("Hotshot: REFUSING to inject path with control characters: \(path.debugDescription)")
+            showNotification(
+                title: "Hotshot",
+                body: "Refused to inject a file whose name contains control characters")
+            return false
+        }
         // Load the pasteboard with image + file URL + plain-text path so
         // CLIs that read the clipboard (GitHub Copilot CLI via ⌘V, Claude
         // Code via Ctrl-V) can consume the screenshot too.

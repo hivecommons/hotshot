@@ -23,16 +23,18 @@ Requirements by platform:
 Run the checks that apply to your change before opening a PR:
 
 ```sh
-swift build
+swift test
 bash linux/tests/hotshot-capture.test.sh
 shellcheck -S warning linux/hotshot-capture.sh linux/install.sh scripts/bundle.sh
 pwsh -NoProfile -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser; Invoke-ScriptAnalyzer -Path windows -Recurse -Severity Error"
+pwsh -NoProfile -Command "Install-Module Pester -Force -Scope CurrentUser; Invoke-Pester -Path windows/tests -CI"
 ```
 
 Notes:
 
 - The Linux test suite is hermetic and does not need a display server or capture tools.
-- `swift build` requires macOS because the executable imports AppKit.
+- `swift test` requires macOS because the executable imports AppKit; it runs the suite in `Tests/HotshotCoreTests`.
+- The Pester suite (`windows/tests/hotshot-capture.tests.ps1`) exercises the Windows capture script logic and runs on `windows-latest` in CI; it's independent of the PSScriptAnalyzer lint check above.
 - If you cannot run a platform-specific check locally, say so in the PR and describe the manual validation you did run.
 
 ## Coding guidelines

@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: shellcheck
-        run: shellcheck -S warning linux/hotshot-capture.sh linux/install.sh scripts/bundle.sh
+        run: shellcheck -S warning linux/hotshot-capture.sh linux/install.sh linux/tests/hotshot-capture.test.sh linux/tests/install.test.sh scripts/bundle.sh
 
   shell-tests:
     name: Linux capture tests
@@ -36,6 +36,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Run Linux capture tests
         run: bash linux/tests/hotshot-capture.test.sh
+      - name: Run Linux installer tests
+        run: bash linux/tests/install.test.sh
 
   powershell-analyze:
     name: PSScriptAnalyzer (Windows scripts)

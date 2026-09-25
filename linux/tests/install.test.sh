@@ -214,7 +214,7 @@ grep -qF "binding <Ctrl><Shift>Print" "$GSLOG"
 check "gnome hotkey (already registered): binding still refreshed" $?
 
 # gsettings missing -> exit 1 with a clear message.
-out="$(env -i HOME="$FAKEHOME" PATH="$BASEPATH" \
+out="$(env -i HOME="$FAKEHOME" PATH="$MINBIN" \
     bash "$INSTALLER" --prefix "$PREFIX" --gnome-hotkey 2>&1)"
 rc=$?
 assert_eq "gnome hotkey without gsettings: exit 1" "1" "$rc"

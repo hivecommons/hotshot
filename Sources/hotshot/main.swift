@@ -502,7 +502,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func checkForNewScreenshots() {
         let dir = (screenshotDir as NSString).expandingTildeInPath
         let current = snapshotScreenshotFiles(in: dir)
-        let newFiles = current.subtracting(lastSeenScreenshots)
+        let newFiles = newScreenshotFiles(previous: lastSeenScreenshots, current: current)
         lastSeenScreenshots = current
 
         NSLog("Hotshot: checking for new screenshots, found \(newFiles.count) new file(s)")
@@ -510,27 +510,16 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSLog("Hotshot: new files: \(newFiles)")
 
         let fm = FileManager.default
-        var newestFile: String?
-        var newestDate = Date.distantPast
+        var candidates: [ScreenshotFileCandidate] = []
 
         for file in newFiles {
             let fullPath = (dir as NSString).appendingPathComponent(file)
             guard let attrs = try? fm.attributesOfItem(atPath: fullPath),
                   let modified = attrs[.modificationDate] as? Date else { continue }
-
-            let age = Date().timeIntervalSince(modified)
-            guard age < WATCH_FILE_AGE_MAX_SECONDS else { continue }
-
-            // Skip hotshot's own captures
-            if file.hasPrefix("hotshot-") { continue }
-
-            if modified > newestDate {
-                newestDate = modified
-                newestFile = fullPath
-            }
+            candidates.append(ScreenshotFileCandidate(fileName: file, modifiedAt: modified))
         }
 
-        guard let path = newestFile else { return }
+        guard let path = newestInjectableScreenshot(from: candidates, directory: dir) else { return }
 
         NSLog("Hotshot: watcher detected new screenshot: \(path)")
 
@@ -662,10 +651,8 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @discardableResult
     func injectPath(_ path: String, terminalBundleID bid: String) -> Bool {
-        // Never type a path containing control characters: macOS filenames
-        // may embed CR/LF, and a Return keystroke mid-path would execute
-        // attacker-chosen text as a command in the target terminal.
-        guard !containsControlCharacters(path) else {
+        let targetCLI = detectTargetCLI(terminalBundleID: bid)
+        guard let text = typedScreenshotText(path: path, targetCLI: targetCLI) else {
             NSLog("Hotshot: REFUSING to inject path with control characters: \(path.debugDescription)")
             showNotification(
                 title: "Hotshot",
@@ -680,13 +667,6 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Type the format the CLI in the target session understands:
         // Claude Code expects "[path] "; GitHub Copilot CLI and friends
         // need a bare shell-escaped path (as Finder drag-and-drop inserts).
-        let text: String
-        switch detectTargetCLI(terminalBundleID: bid) {
-        case .plainPath:
-            text = shellEscapedPath(path) + " "
-        case .claude:
-            text = "[\(path)] "
-        }
         switch bid {
         case "com.googlecode.iterm2":
             return injectViaITerm2(text)

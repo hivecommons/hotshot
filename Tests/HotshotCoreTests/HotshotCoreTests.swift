@@ -44,6 +44,29 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertEqual(findMostRecentScreenshot(in: dir.path), latestPNG.path)
     }
 
+    func testNewScreenshotFilesReturnsOnlyAdditions() {
+        XCTAssertEqual(
+            newScreenshotFiles(previous: ["old.png", "same.jpg"], current: ["same.jpg", "new.webp"]),
+            ["new.webp"]
+        )
+    }
+
+    func testNewestInjectableScreenshotFiltersStaleAndHotshotOwnedFiles() {
+        let dir = "/Users/me/Desktop"
+        let now = Date(timeIntervalSince1970: 1_000)
+        let candidates = [
+            ScreenshotFileCandidate(fileName: "old.png", modifiedAt: now.addingTimeInterval(-20)),
+            ScreenshotFileCandidate(fileName: "hotshot-20260925.png", modifiedAt: now),
+            ScreenshotFileCandidate(fileName: "first.png", modifiedAt: now.addingTimeInterval(-2)),
+            ScreenshotFileCandidate(fileName: "newest.png", modifiedAt: now.addingTimeInterval(-1)),
+        ]
+
+        XCTAssertEqual(
+            newestInjectableScreenshot(from: candidates, directory: dir, now: now, maxAge: 10),
+            "/Users/me/Desktop/newest.png"
+        )
+    }
+
     func testMacOSScreenshotLocationNormalization() {
         XCTAssertNil(normalizedMacOSScreenshotLocation("\n \t"))
         XCTAssertEqual(normalizedMacOSScreenshotLocation("~/Pictures\n"), NSHomeDirectory() + "/Pictures")
@@ -69,6 +92,15 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertTrue(containsControlCharacters("x\t.png"))
         XCTAssertTrue(containsControlCharacters("x\u{7F}.png"))
         XCTAssertTrue(containsControlCharacters("x\u{2028}.png"))
+    }
+
+    func testTypedScreenshotTextBuildsCliSpecificInjectionText() {
+        XCTAssertEqual(typedScreenshotText(path: "/Users/me/My Shot.png", targetCLI: .claude), "[/Users/me/My Shot.png] ")
+        XCTAssertEqual(typedScreenshotText(path: "/Users/me/My Shot.png", targetCLI: .plainPath), "/Users/me/My\\ Shot.png ")
+    }
+
+    func testTypedScreenshotTextRejectsControlCharacters() {
+        XCTAssertNil(typedScreenshotText(path: "/Users/me/bad\nname.png", targetCLI: .plainPath))
     }
 
     private func makeDirectory() throws -> URL {

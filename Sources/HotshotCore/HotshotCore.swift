@@ -85,6 +85,34 @@ public func snapshotScreenshotFiles(in dir: String) -> Set<String> {
     return result
 }
 
+public struct ScreenshotFileCandidate: Equatable {
+    public let fileName: String
+    public let modifiedAt: Date
+
+    public init(fileName: String, modifiedAt: Date) {
+        self.fileName = fileName
+        self.modifiedAt = modifiedAt
+    }
+}
+
+public func newScreenshotFiles(previous: Set<String>, current: Set<String>) -> Set<String> {
+    current.subtracting(previous)
+}
+
+public func newestInjectableScreenshot(
+    from candidates: [ScreenshotFileCandidate],
+    directory: String,
+    now: Date = Date(),
+    maxAge: TimeInterval = WATCH_FILE_AGE_MAX_SECONDS
+) -> String? {
+    let newest = candidates
+        .filter { !$0.fileName.hasPrefix("hotshot-") }
+        .filter { now.timeIntervalSince($0.modifiedAt) < maxAge }
+        .max { $0.modifiedAt < $1.modifiedAt }
+    guard let newest else { return nil }
+    return (directory as NSString).appendingPathComponent(newest.fileName)
+}
+
 /// Backslash-escape a path the way Terminal does on drag-and-drop, so
 /// CLIs that parse bare paths (GitHub Copilot CLI, aider, ...) accept it.
 /// Claude Code accepts the same escaped form, so no brackets are needed.
@@ -135,6 +163,16 @@ public func containsControlCharacters(_ s: String) -> Bool {
         }
     }
     return false
+}
+
+public func typedScreenshotText(path: String, targetCLI: TargetCLI) -> String? {
+    guard !containsControlCharacters(path) else { return nil }
+    switch targetCLI {
+    case .plainPath:
+        return shellEscapedPath(path) + " "
+    case .claude:
+        return "[\(path)] "
+    }
 }
 
 /// Escape a string for embedding in an AppleScript double-quoted literal.

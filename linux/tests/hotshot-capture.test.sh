@@ -409,6 +409,195 @@ assert_eq "e2e hyprland copilot: exit 0" "0" "$rc"
 assert_eq "e2e hyprland copilot: typed escaped bare path" "$(shell_escape "$shot") " "$(cat "$TYPELOG")"
 
 # ==============================================================================
+# clipboard: copyq multi-format branch and degradation ladder
+# ==============================================================================
+COPYQLOG="$TMP/copyq.log"
+CQSTUBS="$TMP/cqstubs"
+mkdir -p "$CQSTUBS"
+cp "$STUBS/maim" "$STUBS/xclip" "$STUBS/xdotool" "$CQSTUBS/"
+
+run_e2e_stubs() { # $1 = stub dir, $2 = focus pid; remaining args passed on
+    local stubs="$1" focus="$2"
+    shift 2
+    rm -f "$TYPELOG" "$CLIPLOG" "$COPYQLOG"
+    env -i HOME="$HOME" DISPLAY=:99 PATH="$stubs:/usr/bin:/bin" \
+        HOTSHOT_DIR="$TMP/shots" HOTSHOT_TEST_FOCUS_PID="$focus" \
+        bash "$SCRIPT" "$@"
+}
+
+# copyq running -> one multi-format entry (image/png + text path), xclip unused.
+cat >"$CQSTUBS/copyq" <<EOF
+#!/usr/bin/env bash
+[ "\$1" = "size" ] && { echo 1; exit 0; }
+cat >/dev/null
+echo "\$@" >>"$COPYQLOG"
+EOF
+chmod +x "$CQSTUBS/copyq"
+shot="$(run_e2e_stubs "$CQSTUBS" "$plain_root" --full)"
+rc=$?
+assert_eq "e2e copyq: exit 0" "0" "$rc"
+grep -q -- "copy image/png - text/plain $shot" "$COPYQLOG"
+check "e2e copyq: multi-format entry carries image + text path" $?
+ok=1; [ ! -e "$CLIPLOG" ] && ok=0
+check "e2e copyq: xclip not called when copyq owns the clipboard" "$ok"
+
+# copyq multi-format copy fails -> image-only fallback, still exit 0.
+cat >"$CQSTUBS/copyq" <<EOF
+#!/usr/bin/env bash
+[ "\$1" = "size" ] && { echo 1; exit 0; }
+cat >/dev/null
+echo "\$@" >>"$COPYQLOG"
+case "\$*" in *text/plain*) exit 1 ;; esac
+EOF
+shot="$(run_e2e_stubs "$CQSTUBS" "$plain_root" --full 2>"$TMP/cq.err")"
+rc=$?
+assert_eq "e2e copyq multi-format failure: exit 0" "0" "$rc"
+grep -qx -- "copy image/png -" "$COPYQLOG"
+check "e2e copyq multi-format failure: falls back to image-only entry" $?
+ok=1; [ ! -s "$TMP/cq.err" ] && ok=0
+check "e2e copyq multi-format failure: fallback success emits no warning" "$ok"
+
+# Both copyq copies fail -> warning on stderr, capture still succeeds.
+cat >"$CQSTUBS/copyq" <<EOF
+#!/usr/bin/env bash
+[ "\$1" = "size" ] && { echo 1; exit 0; }
+cat >/dev/null
+echo "\$@" >>"$COPYQLOG"
+exit 1
+EOF
+shot="$(run_e2e_stubs "$CQSTUBS" "$plain_root" --full 2>"$TMP/cq.err")"
+rc=$?
+assert_eq "e2e copyq total failure: exit 0 (clipboard is best-effort)" "0" "$rc"
+grep -q "copyq failed to load the clipboard" "$TMP/cq.err"
+check "e2e copyq total failure: warning names copyq" $?
+ok=1; [ -s "$shot" ] && ok=0
+check "e2e copyq total failure: screenshot still created" "$ok"
+
+# copyq installed but its server is not running -> fall through to xclip.
+cat >"$CQSTUBS/copyq" <<EOF
+#!/usr/bin/env bash
+[ "\$1" = "size" ] && exit 1
+echo "\$@" >>"$COPYQLOG"
+EOF
+shot="$(run_e2e_stubs "$CQSTUBS" "$plain_root" --full)"
+rc=$?
+assert_eq "e2e copyq not running: exit 0" "0" "$rc"
+grep -q -- "-t image/png -i $shot" "$CLIPLOG"
+check "e2e copyq not running: xclip loads the clipboard instead" $?
+ok=1; { [ ! -e "$COPYQLOG" ] || ! grep -q "^copy" "$COPYQLOG"; } && ok=0
+check "e2e copyq not running: copyq copy never attempted" "$ok"
+
+# ==============================================================================
+# missing/failing tool degradation: warn, keep going, echo the path
+# ==============================================================================
+# X11 without xclip -> install hint on stderr, capture + typing still work.
+NOXCLIP="$TMP/noxclip"
+mkdir -p "$NOXCLIP"
+cp "$STUBS/maim" "$STUBS/xdotool" "$NOXCLIP/"
+shot="$(run_e2e_stubs "$NOXCLIP" "$plain_root" --full 2>"$TMP/noxclip.err")"
+rc=$?
+assert_eq "e2e no xclip: exit 0" "0" "$rc"
+grep -q "install 'xclip'" "$TMP/noxclip.err"
+check "e2e no xclip: warning names xclip" $?
+assert_eq "e2e no xclip: still types the path" "[$shot] " "$(cat "$TYPELOG")"
+
+# X11 without xdotool -> no focus, no typing; warning carries the path.
+NOXDO="$TMP/noxdo"
+mkdir -p "$NOXDO"
+cp "$STUBS/maim" "$STUBS/xclip" "$NOXDO/"
+shot="$(run_e2e_stubs "$NOXDO" "$plain_root" --full 2>"$TMP/noxdo.err")"
+rc=$?
+assert_eq "e2e no xdotool: exit 0" "0" "$rc"
+grep -q "install 'xdotool' for typed injection" "$TMP/noxdo.err"
+check "e2e no xdotool: warning suggests xdotool" $?
+grep -q -- "$shot" "$TMP/noxdo.err"
+check "e2e no xdotool: warning includes the screenshot path" $?
+ok=1; [ ! -e "$TYPELOG" ] && ok=0
+check "e2e no xdotool: nothing typed" "$ok"
+
+# xdotool present but `type` fails -> warning, capture still succeeds.
+FAILTYPE="$TMP/failtype"
+mkdir -p "$FAILTYPE"
+cp "$STUBS/maim" "$STUBS/xclip" "$FAILTYPE/"
+cat >"$FAILTYPE/xdotool" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+    getactivewindow) echo 4242 ;;
+    getwindowpid) echo "${HOTSHOT_TEST_FOCUS_PID:?}" ;;
+    windowactivate) : ;;
+    type) exit 1 ;;
+esac
+EOF
+chmod +x "$FAILTYPE/xdotool"
+shot="$(run_e2e_stubs "$FAILTYPE" "$plain_root" --full 2>"$TMP/failtype.err")"
+rc=$?
+assert_eq "e2e xdotool type failure: exit 0" "0" "$rc"
+grep -q "xdotool failed to type" "$TMP/failtype.err"
+check "e2e xdotool type failure: warning emitted" $?
+ok=1; [ -s "$shot" ] && ok=0
+check "e2e xdotool type failure: screenshot still created and echoed" "$ok"
+
+# Wayland without wl-copy -> install hint for wl-clipboard, typing still works.
+NOWLCOPY="$TMP/nowlcopy"
+mkdir -p "$NOWLCOPY"
+cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wtype" "$WSTUBS/swaymsg" "$NOWLCOPY/"
+rm -f "$TYPELOG" "$CLIPLOG"
+shot="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+    PATH="$NOWLCOPY:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
+    HOTSHOT_TEST_FOCUS_PID="$plain_root" \
+    bash "$SCRIPT" --full 2>"$TMP/nowlcopy.err")"
+rc=$?
+assert_eq "e2e wayland no wl-copy: exit 0" "0" "$rc"
+grep -q "install 'wl-clipboard'" "$TMP/nowlcopy.err"
+check "e2e wayland no wl-copy: warning names wl-clipboard" $?
+assert_eq "e2e wayland no wl-copy: still types the path" "[$shot] " "$(cat "$TYPELOG")"
+
+# Wayland without wtype or ydotool -> warning carries the path, nothing typed.
+NOTYPER="$TMP/notyper"
+mkdir -p "$NOTYPER"
+cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wl-copy" "$WSTUBS/swaymsg" "$NOTYPER/"
+rm -f "$TYPELOG" "$CLIPLOG"
+shot="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+    PATH="$NOTYPER:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
+    HOTSHOT_TEST_FOCUS_PID="$plain_root" \
+    bash "$SCRIPT" --full 2>"$TMP/notyper.err")"
+rc=$?
+assert_eq "e2e wayland no typing tool: exit 0" "0" "$rc"
+grep -q "install 'wtype'" "$TMP/notyper.err"
+check "e2e wayland no typing tool: warning suggests wtype" $?
+grep -q -- "$shot" "$TMP/notyper.err"
+check "e2e wayland no typing tool: warning includes the path" $?
+ok=1; [ ! -e "$TYPELOG" ] && ok=0
+check "e2e wayland no typing tool: nothing typed" "$ok"
+
+# wtype present but fails -> warning, capture still succeeds.
+FAILWTYPE="$TMP/failwtype"
+mkdir -p "$FAILWTYPE"
+cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wl-copy" "$WSTUBS/swaymsg" "$FAILWTYPE/"
+printf '#!/usr/bin/env bash\nexit 1\n' >"$FAILWTYPE/wtype"
+chmod +x "$FAILWTYPE/wtype"
+rm -f "$TYPELOG" "$CLIPLOG"
+shot="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+    PATH="$FAILWTYPE:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
+    HOTSHOT_TEST_FOCUS_PID="$plain_root" \
+    bash "$SCRIPT" --full 2>"$TMP/failwtype.err")"
+rc=$?
+assert_eq "e2e wayland wtype failure: exit 0" "0" "$rc"
+grep -q "wtype failed to type" "$TMP/failwtype.err"
+check "e2e wayland wtype failure: warning emitted" $?
+ok=1; [ -s "$shot" ] && ok=0
+check "e2e wayland wtype failure: screenshot still created" "$ok"
+
+# Screenshot directory cannot be created -> die before any capture.
+: >"$TMP/notadir"
+out="$(env -i HOME="$HOME" DISPLAY=:99 PATH="$STUBS:/usr/bin:/bin" \
+    HOTSHOT_DIR="$TMP/notadir/sub" HOTSHOT_TEST_FOCUS_PID="$plain_root" \
+    bash "$SCRIPT" --full 2>&1)"
+rc=$?
+assert_eq "e2e unwritable shot dir: exit 1" "1" "$rc"
+case "$out" in *"cannot create screenshot directory"*) check "e2e unwritable shot dir: die message" 0 ;; *) check "e2e unwritable shot dir: die message" 1 ;; esac
+
+# ==============================================================================
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

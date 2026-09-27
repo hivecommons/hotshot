@@ -254,7 +254,13 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         NSLog("Hotshot: manually injecting clipboard image via Ctrl-V")
-        enrichClipboardWithSavedImage()
+        guard enrichClipboardWithSavedImage() != nil else {
+            NSLog("Hotshot: could not save/enrich clipboard image; refusing to paste untrusted clipboard")
+            showNotification(
+                title: "Hotshot",
+                body: "Could not save the clipboard image \u{2014} paste skipped")
+            return
+        }
         sendCtrlV(terminalBundleID: bid)
         showNotification(title: "Hotshot", body: "Clipboard image injected via Ctrl-V")
     }
@@ -273,6 +279,12 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let png = pb.data(forType: .png) { return png }
         if let tiff = pb.data(forType: .tiff),
             let rep = NSBitmapImageRep(data: tiff),
+            let png = rep.representation(using: .png, properties: [:])
+        {
+            return png
+        }
+        if let jpeg = pb.data(forType: NSPasteboard.PasteboardType("public.jpeg")),
+            let rep = NSBitmapImageRep(data: jpeg),
             let png = rep.representation(using: .png, properties: [:])
         {
             return png
@@ -325,11 +337,14 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func enrichClipboardWithSavedImage() -> String? {
         let pb = NSPasteboard.general
 
-        // Already enriched (image + existing file path) — nothing to do.
+        // Already enriched (image + control-character-free existing file
+        // path) — nothing to do. Text failing the trust check is rewritten
+        // below so a Ctrl-V paste never types attacker-controlled clipboard
+        // text into the terminal.
         if pb.data(forType: .png) != nil,
-            let existing = pb.string(forType: .string),
-            FileManager.default.fileExists(
-                atPath: existing.replacingOccurrences(of: "\\", with: ""))
+            let existing = trustedEnrichedClipboardPath(
+                pb.string(forType: .string),
+                fileExists: { FileManager.default.fileExists(atPath: $0) })
         {
             return existing
         }
@@ -387,8 +402,16 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Save to disk and add a plain-text path + file URL alongside the
         // image so both image-paste (Claude Code) and text-paste (GitHub
-        // Copilot CLI) consumers work.
-        enrichClipboardWithSavedImage()
+        // Copilot CLI) consumers work. If the image cannot be saved and the
+        // clipboard rewritten, DO NOT paste: Ctrl-V would type whatever
+        // text/plain the clipboard's author put alongside the image.
+        guard enrichClipboardWithSavedImage() != nil else {
+            NSLog("Hotshot: could not save/enrich clipboard image; refusing to auto-paste untrusted clipboard")
+            showNotification(
+                title: "Hotshot",
+                body: "Clipboard image could not be saved \u{2014} auto-paste skipped")
+            return
+        }
 
         guard let bid = lastTerminalBundleID else {
             NSLog("Hotshot: clipboard image detected but no terminal tracked")

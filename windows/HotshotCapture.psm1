@@ -46,6 +46,11 @@ function Get-HotshotTypedText {
         [Parameter(Mandatory)] [ValidateSet('claude', 'plain', 'unknown')] [string]$Cli
     )
 
+    # Parity with the macOS app (HotshotCore.containsControlCharacters): a
+    # CR/LF in the path would press Enter mid-string via SendKeys, so paths
+    # containing control characters are never typed.
+    if ($ShotPath -match '[\x00-\x1F\x7F\u2028\u2029]') { return '' }
+
     switch ($Cli) {
         'plain' {
             # Windows shells take a double-quoted path; quote only when needed.

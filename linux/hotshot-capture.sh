@@ -194,12 +194,30 @@ shell_escape() {
     printf '%s' "$out"
 }
 
+# Parity with the macOS app (HotshotCore.containsControlCharacters): typing a
+# path containing CR/LF presses Return mid-string in the terminal, so such
+# paths must never be injected. Covers C0 controls, DEL, and the Unicode
+# line/paragraph separators.
+has_control_chars() {
+    local ls2028 ps2029
+    ls2028="$(printf '\342\200\250')"
+    ps2029="$(printf '\342\200\251')"
+    case "$1" in
+        *[[:cntrl:]]* | *"$ls2028"* | *"$ps2029"*) return 0 ;;
+    esac
+    return 1
+}
+
 case "$CLI" in
     plain) TEXT="$(shell_escape "$SHOT_PATH") " ;;
     *) TEXT="[$SHOT_PATH] " ;;
 esac
 
 # --- 4. typed injection ------------------------------------------------------
+if [ "$DO_TYPE" = 1 ] && has_control_chars "$SHOT_PATH"; then
+    echo "hotshot: refusing to type a path containing control characters; screenshot saved" >&2
+    DO_TYPE=0
+fi
 if [ "$DO_TYPE" = 1 ]; then
     if [ "$SESSION" = "x11" ]; then
         if have xdotool; then

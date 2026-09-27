@@ -83,7 +83,9 @@ $text = Get-HotshotTypedText -ShotPath $shotPath -Cli $cli
 
 # --- 4. typed injection ---------------------------------------------------------
 if (-not $NoType) {
-    if ($termHwnd -ne [IntPtr]::Zero) {
+    if (-not $text) {
+        Write-Warning "hotshot: refusing to type a path containing control characters; path is $shotPath"
+    } elseif ($termHwnd -ne [IntPtr]::Zero) {
         [void][Hotshot.Native]::SetForegroundWindow($termHwnd)
         Start-Sleep -Milliseconds 300
         $escaped = ConvertTo-SendKeysEscaped -Text $text

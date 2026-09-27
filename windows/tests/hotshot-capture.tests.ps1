@@ -73,6 +73,16 @@ Describe 'Get-HotshotTypedText' {
         Get-HotshotTypedText -ShotPath 'C:\Shots\one.png' -Cli plain | Should -Be 'C:\Shots\one.png '
         Get-HotshotTypedText -ShotPath 'C:\My Shots\one.png' -Cli plain | Should -Be '"C:\My Shots\one.png" '
     }
+
+    It 'refuses paths containing control characters (macOS parity)' {
+        foreach ($cli in @('claude', 'plain', 'unknown')) {
+            Get-HotshotTypedText -ShotPath "C:\Shots\evil`r`n\one.png" -Cli $cli | Should -Be ''
+            Get-HotshotTypedText -ShotPath "C:\Shots\evil`t\one.png" -Cli $cli | Should -Be ''
+            Get-HotshotTypedText -ShotPath ("C:\Shots\evil" + [char]0x7F + "\one.png") -Cli $cli | Should -Be ''
+            Get-HotshotTypedText -ShotPath ("C:\Shots\evil" + [char]0x2028 + "\one.png") -Cli $cli | Should -Be ''
+            Get-HotshotTypedText -ShotPath ("C:\Shots\evil" + [char]0x2029 + "\one.png") -Cli $cli | Should -Be ''
+        }
+    }
 }
 
 Describe 'ConvertTo-SendKeysEscaped' {

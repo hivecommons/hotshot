@@ -9,6 +9,23 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertEqual(shellEscapedPath("/tmp/tab\tname.png"), "/tmp/tab\\\tname.png")
     }
 
+    func testTTYScriptSelectsPerTerminalAppleScript() {
+        XCTAssertEqual(
+            ttyScript(forBundleID: "com.googlecode.iterm2"),
+            "tell application \"iTerm2\" to get tty of current session of current window")
+        XCTAssertEqual(
+            ttyScript(forBundleID: "com.apple.Terminal"),
+            "tell application \"Terminal\" to get tty of selected tab of front window")
+    }
+
+    func testTTYScriptReturnsNilForTerminalsWithoutScriptableTTY() {
+        for bid in TERMINAL_BUNDLE_IDS.subtracting(["com.googlecode.iterm2", "com.apple.Terminal"]) {
+            XCTAssertNil(ttyScript(forBundleID: bid), bid)
+        }
+        XCTAssertNil(ttyScript(forBundleID: ""))
+        XCTAssertNil(ttyScript(forBundleID: "com.apple.terminal"))
+    }
+
     func testClassifyCommandsDetectsClaudeAndPlainCli() {
         XCTAssertEqual(classifyCommands(["/opt/homebrew/bin/claude"]), .claude)
         XCTAssertEqual(classifyCommands(["node /usr/local/bin/copilot"]), .plainPath)

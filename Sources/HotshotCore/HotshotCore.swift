@@ -134,6 +134,20 @@ public enum TargetCLI: Equatable {
     case plainPath  // GitHub Copilot CLI, aider, ... expect a bare escaped path
 }
 
+/// AppleScript expression returning the tty of the terminal's focused
+/// session, per terminal app. Returns nil for terminals without
+/// scriptable tty access.
+public func ttyScript(forBundleID bid: String) -> String? {
+    switch bid {
+    case "com.googlecode.iterm2":
+        return "tell application \"iTerm2\" to get tty of current session of current window"
+    case "com.apple.Terminal":
+        return "tell application \"Terminal\" to get tty of selected tab of front window"
+    default:
+        return nil
+    }
+}
+
 /// Classify the commands running on a tty. Claude wins ties since the
 /// bracketed form was hotshot's historical default.
 public func classifyCommands(_ commands: [String]) -> TargetCLI? {

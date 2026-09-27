@@ -591,20 +591,6 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Path Injection
 
-    /// AppleScript expression returning the tty of the terminal's focused
-    /// session, per terminal app. Returns nil for terminals without
-    /// scriptable tty access.
-    func ttyScript(forBundleID bid: String) -> String? {
-        switch bid {
-        case "com.googlecode.iterm2":
-            return "tell application \"iTerm2\" to get tty of current session of current window"
-        case "com.apple.Terminal":
-            return "tell application \"Terminal\" to get tty of selected tab of front window"
-        default:
-            return nil
-        }
-    }
-
     func runAppleScriptForResult(_ source: String) -> String? {
         var error: NSDictionary?
         guard let script = NSAppleScript(source: source) else { return nil }

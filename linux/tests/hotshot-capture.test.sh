@@ -53,6 +53,7 @@ extract_fn() { # $1 = function name
     sed -n "/^$1() {/,/^}$/p" "$SCRIPT"
 }
 eval "$(extract_fn shell_escape)"
+eval "$(extract_fn has_control_chars)"
 eval "$(extract_fn descendants)"
 eval "$(extract_fn classify_cli)"
 
@@ -76,6 +77,28 @@ assert_eq "shell_escape: empty string" "" "$(shell_escape '')"
 # Characters the macOS app does NOT escape must pass through untouched.
 assert_eq "shell_escape: safe chars untouched" 'a-b_c.d~e/f:g@h=i+j%k' \
     "$(shell_escape 'a-b_c.d~e/f:g@h=i+j%k')"
+
+# ==============================================================================
+# has_control_chars (parity with macOS containsControlCharacters)
+# ==============================================================================
+! has_control_chars '/home/u/Pictures/hotshot-1.png'
+check "has_control_chars: plain path -> no" $?
+! has_control_chars '/home/u/spaced dir/hotshot-1.png'
+check "has_control_chars: space is not a control char" $?
+has_control_chars "$(printf '/tmp/evil\n/hotshot-1.png')"
+check "has_control_chars: newline -> yes" $?
+has_control_chars "$(printf '/tmp/evil\r/hotshot-1.png')"
+check "has_control_chars: carriage return -> yes" $?
+has_control_chars "$(printf '/tmp/a\tb/hotshot-1.png')"
+check "has_control_chars: tab -> yes" $?
+has_control_chars "$(printf '/tmp/a\033b/hotshot-1.png')"
+check "has_control_chars: escape (0x1b) -> yes" $?
+has_control_chars "$(printf '/tmp/a\177b/hotshot-1.png')"
+check "has_control_chars: DEL (0x7f) -> yes" $?
+has_control_chars "/tmp/a$(printf '\342\200\250')b/hotshot-1.png"
+check "has_control_chars: U+2028 line separator -> yes" $?
+has_control_chars "/tmp/a$(printf '\342\200\251')b/hotshot-1.png"
+check "has_control_chars: U+2029 paragraph separator -> yes" $?
 
 # ==============================================================================
 # descendants / classify_cli against a real /proc tree
@@ -231,6 +254,20 @@ assert_eq "e2e --no-type: exit 0" "0" "$rc"
 check "e2e --no-type: nothing typed" $?
 [ -s "$shot" ]
 check "e2e --no-type: screenshot still created" $?
+
+# Control character in the directory -> capture + clipboard proceed, typing refused.
+root="$(spawn_tree claude)"
+nl_dir="$TMP/evil
+dir"
+out="$(run_e2e "$root" --full --dir "$nl_dir" 2>"$TMP/e2e-ctrl.err")"
+rc=$?
+assert_eq "e2e control-char dir: exit 0" "0" "$rc"
+[ -s "$out" ]
+check "e2e control-char dir: screenshot still created" $?
+[ ! -e "$TYPELOG" ]
+check "e2e control-char dir: nothing typed" $?
+grep -q "refusing to type a path containing control characters" "$TMP/e2e-ctrl.err"
+check "e2e control-char dir: refusal warning printed" $?
 
 # Capture failure (maim dies) -> script dies, no typing.
 cat >"$STUBS/failmaim" <<'EOF'

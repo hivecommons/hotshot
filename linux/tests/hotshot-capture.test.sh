@@ -598,6 +598,216 @@ assert_eq "e2e unwritable shot dir: exit 1" "1" "$rc"
 case "$out" in *"cannot create screenshot directory"*) check "e2e unwritable shot dir: die message" 0 ;; *) check "e2e unwritable shot dir: die message" 1 ;; esac
 
 # ==============================================================================
+# X11 region mode: flag forwarding and cancelled-capture handling
+# ==============================================================================
+REGIONSTUBS="$TMP/regionstubs"
+mkdir -p "$REGIONSTUBS"
+MAIMLOG="$TMP/maim.log"
+cp "$STUBS/xclip" "$STUBS/xdotool" "$REGIONSTUBS/"
+cat >"$REGIONSTUBS/maim" <<EOF
+#!/usr/bin/env bash
+echo "\$@" >>"$MAIMLOG"
+for out in "\$@"; do :; done
+printf 'PNG' >"\$out"
+EOF
+chmod +x "$REGIONSTUBS/maim"
+
+# Default mode is --region: maim gets -s -u (select + no decorations).
+rm -f "$MAIMLOG"
+shot="$(run_e2e_stubs "$REGIONSTUBS" "$plain_root")"
+rc=$?
+assert_eq "e2e x11 region (default mode): exit 0" "0" "$rc"
+grep -q -- "-s -u" "$MAIMLOG"
+check "e2e x11 region: maim invoked with -s -u" $?
+assert_eq "e2e x11 region: typed bracketed default" "[$shot] " "$(cat "$TYPELOG")"
+
+# --full must NOT pass the region-select flag.
+rm -f "$MAIMLOG"
+run_e2e_stubs "$REGIONSTUBS" "$plain_root" --full >/dev/null
+grep -q -- "-s" "$MAIMLOG"
+if [ $? -eq 0 ]; then check "e2e x11 full: maim not given -s" 1; else check "e2e x11 full: maim not given -s" 0; fi
+
+# Cancelled region select (maim -s exits 1) -> die, nothing typed.
+cat >"$REGIONSTUBS/maim" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+out="$(run_e2e_stubs "$REGIONSTUBS" "$plain_root" 2>&1 >/dev/null)"
+rc=$?
+assert_eq "e2e x11 cancelled region: exit 1" "1" "$rc"
+case "$out" in *"capture cancelled or maim failed"*) check "e2e x11 cancelled region: die message" 0 ;; *) check "e2e x11 cancelled region: die message" 1 ;; esac
+ok=1; [ ! -e "$TYPELOG" ] && ok=0
+check "e2e x11 cancelled region: nothing typed" "$ok"
+
+# scrot fallback in region mode: scrot gets -s; scrot failure dies.
+SCROTREGION="$TMP/scrotregion"
+mkdir -p "$SCROTREGION"
+SCROTLOG="$TMP/scrot.log"
+cp "$STUBS/xclip" "$STUBS/xdotool" "$SCROTREGION/"
+cat >"$SCROTREGION/scrot" <<EOF
+#!/usr/bin/env bash
+echo "\$@" >>"$SCROTLOG"
+for out in "\$@"; do :; done
+printf 'PNG' >"\$out"
+EOF
+chmod +x "$SCROTREGION/scrot"
+rm -f "$SCROTLOG"
+shot="$(run_e2e_stubs "$SCROTREGION" "$plain_root")"
+rc=$?
+assert_eq "e2e scrot region: exit 0" "0" "$rc"
+grep -q -- "-s" "$SCROTLOG"
+check "e2e scrot region: scrot invoked with -s" $?
+
+cat >"$SCROTREGION/scrot" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+out="$(run_e2e_stubs "$SCROTREGION" "$plain_root" --full 2>&1 >/dev/null)"
+rc=$?
+assert_eq "e2e scrot failure: exit 1" "1" "$rc"
+case "$out" in *"scrot failed"*) check "e2e scrot failure: die message names scrot" 0 ;; *) check "e2e scrot failure: die message names scrot" 1 ;; esac
+
+# ==============================================================================
+# zero-byte screenshot guard: capture tool "succeeds" but writes nothing
+# ==============================================================================
+EMPTYSHOT="$TMP/emptyshot"
+mkdir -p "$EMPTYSHOT"
+cp "$STUBS/xclip" "$STUBS/xdotool" "$EMPTYSHOT/"
+cat >"$EMPTYSHOT/maim" <<'EOF'
+#!/usr/bin/env bash
+for out in "$@"; do :; done
+: >"$out"
+EOF
+chmod +x "$EMPTYSHOT/maim"
+out="$(run_e2e_stubs "$EMPTYSHOT" "$plain_root" --full 2>&1 >/dev/null)"
+rc=$?
+assert_eq "e2e empty screenshot: exit 1" "1" "$rc"
+case "$out" in *"screenshot file was not created"*) check "e2e empty screenshot: die message" 0 ;; *) check "e2e empty screenshot: die message" 1 ;; esac
+ok=1; [ ! -e "$TYPELOG" ] && ok=0
+check "e2e empty screenshot: nothing typed" "$ok"
+
+# ==============================================================================
+# clipboard-tool failure warnings (tool present but exits non-zero)
+# ==============================================================================
+# xclip fails -> warning, capture and typing still succeed.
+FAILXCLIP="$TMP/failxclip"
+mkdir -p "$FAILXCLIP"
+cp "$STUBS/maim" "$STUBS/xdotool" "$FAILXCLIP/"
+printf '#!/usr/bin/env bash\nexit 1\n' >"$FAILXCLIP/xclip"
+chmod +x "$FAILXCLIP/xclip"
+shot="$(run_e2e_stubs "$FAILXCLIP" "$plain_root" --full 2>"$TMP/failxclip.err")"
+rc=$?
+assert_eq "e2e xclip failure: exit 0 (clipboard is best-effort)" "0" "$rc"
+grep -q "xclip failed to load the clipboard" "$TMP/failxclip.err"
+check "e2e xclip failure: warning names xclip" $?
+assert_eq "e2e xclip failure: still types the path" "[$shot] " "$(cat "$TYPELOG")"
+
+# wl-copy fails -> warning, capture and typing still succeed.
+FAILWLCOPY="$TMP/failwlcopy"
+mkdir -p "$FAILWLCOPY"
+cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wtype" "$WSTUBS/swaymsg" "$FAILWLCOPY/"
+printf '#!/usr/bin/env bash\ncat >/dev/null\nexit 1\n' >"$FAILWLCOPY/wl-copy"
+chmod +x "$FAILWLCOPY/wl-copy"
+rm -f "$TYPELOG" "$CLIPLOG"
+shot="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+    PATH="$FAILWLCOPY:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
+    HOTSHOT_TEST_FOCUS_PID="$plain_root" \
+    bash "$SCRIPT" --full 2>"$TMP/failwlcopy.err")"
+rc=$?
+assert_eq "e2e wl-copy failure: exit 0 (clipboard is best-effort)" "0" "$rc"
+grep -q "wl-copy failed to load the clipboard" "$TMP/failwlcopy.err"
+check "e2e wl-copy failure: warning names wl-copy" $?
+assert_eq "e2e wl-copy failure: still types the path" "[$shot] " "$(cat "$TYPELOG")"
+
+# ==============================================================================
+# ydotool present but fails -> warning points at ydotoold
+# ==============================================================================
+FAILYDO="$TMP/failydo"
+mkdir -p "$FAILYDO"
+cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wl-copy" "$WSTUBS/swaymsg" "$FAILYDO/"
+printf '#!/usr/bin/env bash\nexit 1\n' >"$FAILYDO/ydotool"
+chmod +x "$FAILYDO/ydotool"
+rm -f "$TYPELOG" "$CLIPLOG"
+shot="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+    PATH="$FAILYDO:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
+    HOTSHOT_TEST_FOCUS_PID="$plain_root" \
+    bash "$SCRIPT" --full 2>"$TMP/failydo.err")"
+rc=$?
+assert_eq "e2e ydotool failure: exit 0" "0" "$rc"
+grep -q "ydotool failed (is ydotoold running?)" "$TMP/failydo.err"
+check "e2e ydotool failure: warning asks about ydotoold" $?
+ok=1; [ -s "$shot" ] && ok=0
+check "e2e ydotool failure: screenshot still created" "$ok"
+
+# ==============================================================================
+# focus-detection degradation
+# ==============================================================================
+# hyprctl reports pid null (no focused window) -> unknown CLI, bracketed default.
+NULLHYPR="$TMP/nullhypr"
+mkdir -p "$NULLHYPR"
+cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wl-copy" "$WSTUBS/wtype" "$NULLHYPR/"
+printf '#!/usr/bin/env bash\necho "{\\"pid\\":null}"\n' >"$NULLHYPR/hyprctl"
+chmod +x "$NULLHYPR/hyprctl"
+rm -f "$TYPELOG" "$CLIPLOG"
+shot="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 HYPRLAND_INSTANCE_SIGNATURE=test \
+    PATH="$NULLHYPR:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
+    bash "$SCRIPT" --full)"
+rc=$?
+assert_eq "e2e hyprland null pid: exit 0" "0" "$rc"
+assert_eq "e2e hyprland null pid: bracketed default typed" "[$shot] " "$(cat "$TYPELOG")"
+
+# xdotool getactivewindow fails -> no focus pid, still captures and types default.
+NOFOCUS="$TMP/nofocus"
+mkdir -p "$NOFOCUS"
+cp "$STUBS/maim" "$STUBS/xclip" "$NOFOCUS/"
+cat >"$NOFOCUS/xdotool" <<EOF
+#!/usr/bin/env bash
+case "\$1" in
+    getactivewindow) exit 1 ;;
+    getwindowpid) echo "should-not-be-called" >&2; exit 1 ;;
+    type) shift; while [ "\$1" != "--" ]; do shift; done; shift; printf '%s' "\$*" >>"$TYPELOG" ;;
+esac
+EOF
+chmod +x "$NOFOCUS/xdotool"
+shot="$(run_e2e_stubs "$NOFOCUS" "$plain_root" --full 2>"$TMP/nofocus.err")"
+rc=$?
+assert_eq "e2e x11 no active window: exit 0" "0" "$rc"
+assert_eq "e2e x11 no active window: bracketed default typed" "[$shot] " "$(cat "$TYPELOG")"
+if grep -q "should-not-be-called" "$TMP/nofocus.err"; then check "e2e x11 no active window: getwindowpid never queried" 1; else check "e2e x11 no active window: getwindowpid never queried" 0; fi
+
+# ==============================================================================
+# notify-send integration: success toast and die() notification
+# ==============================================================================
+NOTIFYSTUBS="$TMP/notifystubs"
+mkdir -p "$NOTIFYSTUBS"
+NOTIFYLOG="$TMP/notify.log"
+cp "$STUBS/maim" "$STUBS/xclip" "$STUBS/xdotool" "$NOTIFYSTUBS/"
+cat >"$NOTIFYSTUBS/notify-send" <<EOF
+#!/usr/bin/env bash
+echo "\$@" >>"$NOTIFYLOG"
+EOF
+chmod +x "$NOTIFYSTUBS/notify-send"
+rm -f "$NOTIFYLOG"
+root="$(spawn_tree claude)"
+shot="$(run_e2e_stubs "$NOTIFYSTUBS" "$root" --full)"
+rc=$?
+assert_eq "e2e notify-send success: exit 0" "0" "$rc"
+grep -q "Screenshot captured (CLI: claude)" "$NOTIFYLOG"
+check "e2e notify-send success: toast names the detected CLI" $?
+
+# die() also notifies when notify-send is available.
+rm -f "$NOTIFYLOG"
+cat >"$NOTIFYSTUBS/maim" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+run_e2e_stubs "$NOTIFYSTUBS" "$plain_root" --full >/dev/null 2>&1
+rc=$?
+assert_eq "e2e notify-send on die: exit 1" "1" "$rc"
+grep -q "maim failed" "$NOTIFYLOG"
+check "e2e notify-send on die: failure notification sent" $?
+
+# ==============================================================================
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

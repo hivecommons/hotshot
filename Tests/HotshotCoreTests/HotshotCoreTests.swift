@@ -38,6 +38,17 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertEqual(classifyCommands(["/usr/local/bin/copilot", "/opt/homebrew/bin/claude"]), .claude)
     }
 
+    func testClassifyCommandsMatchesWholeTokenNamesOnly() {
+        // Substring lookalikes must not classify: only an exact basename hit
+        // may pick an injection format.
+        XCTAssertNil(classifyCommands(["/usr/local/bin/claudette"]))
+        XCTAssertNil(classifyCommands(["/opt/bin/claude2"]))
+        XCTAssertNil(classifyCommands(["vim copilot-notes.md"]))
+        XCTAssertNil(classifyCommands([]))
+        // Uppercase basenames still match: tokens are lowercased first.
+        XCTAssertEqual(classifyCommands(["/Applications/CLAUDE"]), .claude)
+    }
+
     func testSnapshotScreenshotFilesFiltersByKnownImageExtensions() throws {
         let dir = try makeDirectory()
         try writeFile("one.png", in: dir)
@@ -84,6 +95,44 @@ final class HotshotCoreTests: XCTestCase {
         )
     }
 
+    func testNewestInjectableScreenshotReturnsNilWhenAllCandidatesFiltered() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        // No candidates at all.
+        XCTAssertNil(newestInjectableScreenshot(from: [], directory: "/d", now: now))
+        // Only hotshot-owned files (re-injecting our own saves would loop).
+        XCTAssertNil(newestInjectableScreenshot(
+            from: [ScreenshotFileCandidate(fileName: "hotshot-1.png", modifiedAt: now)],
+            directory: "/d", now: now, maxAge: 10))
+        // Only stale files.
+        XCTAssertNil(newestInjectableScreenshot(
+            from: [ScreenshotFileCandidate(fileName: "old.png", modifiedAt: now.addingTimeInterval(-11))],
+            directory: "/d", now: now, maxAge: 10))
+    }
+
+    func testNewestInjectableScreenshotExcludesFileExactlyAtMaxAge() {
+        // The age comparison is strict: a file exactly maxAge old is stale.
+        let now = Date(timeIntervalSince1970: 1_000)
+        XCTAssertNil(newestInjectableScreenshot(
+            from: [ScreenshotFileCandidate(fileName: "edge.png", modifiedAt: now.addingTimeInterval(-10))],
+            directory: "/d", now: now, maxAge: 10))
+        XCTAssertEqual(newestInjectableScreenshot(
+            from: [ScreenshotFileCandidate(fileName: "edge.png", modifiedAt: now.addingTimeInterval(-9.999))],
+            directory: "/d", now: now, maxAge: 10), "/d/edge.png")
+    }
+
+    func testSnapshotScreenshotFilesReturnsEmptyForMissingDirectory() {
+        XCTAssertEqual(snapshotScreenshotFiles(in: "/nonexistent/hotshot-test-dir"), [])
+    }
+
+    func testFindMostRecentScreenshotReturnsNilForMissingOrEmptyDirectory() throws {
+        XCTAssertNil(findMostRecentScreenshot(in: "/nonexistent/hotshot-test-dir"))
+        let dir = try makeDirectory()
+        XCTAssertNil(findMostRecentScreenshot(in: dir.path))
+        // A directory holding only non-screenshots is as good as empty.
+        try writeFile("notes.txt", in: dir)
+        XCTAssertNil(findMostRecentScreenshot(in: dir.path))
+    }
+
     func testMacOSScreenshotLocationNormalization() {
         XCTAssertNil(normalizedMacOSScreenshotLocation("\n \t"))
         XCTAssertEqual(normalizedMacOSScreenshotLocation("~/Pictures\n"), NSHomeDirectory() + "/Pictures")
@@ -118,6 +167,10 @@ final class HotshotCoreTests: XCTestCase {
 
     func testTypedScreenshotTextRejectsControlCharacters() {
         XCTAssertNil(typedScreenshotText(path: "/Users/me/bad\nname.png", targetCLI: .plainPath))
+        // The claude/bracketed form embeds the path unescaped, so the
+        // control-character refusal must hold for it too.
+        XCTAssertNil(typedScreenshotText(path: "/Users/me/bad\rname.png", targetCLI: .claude))
+        XCTAssertNil(typedScreenshotText(path: "/Users/me/bad\u{2028}name.png", targetCLI: .claude))
     }
 
     func testTrustedEnrichedClipboardPathAcceptsExistingEscapedPath() {

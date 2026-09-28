@@ -61,6 +61,54 @@ Describe 'Get-TargetCli' {
 
         Get-TargetCli 100 | Should -Be 'unknown'
     }
+
+    It 'rejects substring lookalikes (macOS whole-token parity)' {
+        # Parity with HotshotCore.classifyCommands: only an exact CLI name may
+        # pick an injection format — "claudette"/"claude2" must not classify.
+        $script:ChildName = 'claudette.exe'
+        $script:ChildCommandLine = 'C:\Tools\claudette.exe'
+        $script:GrandchildName = 'node.exe'
+        $script:GrandchildCommandLine = 'node C:\Tools\claude2.cmd'
+
+        Get-TargetCli 100 | Should -Be 'unknown'
+    }
+
+    It 'does not classify a plain CLI from a filename argument lookalike' {
+        $script:ChildName = 'vim.exe'
+        $script:ChildCommandLine = 'vim copilot-notes.md'
+        $script:GrandchildName = 'pwsh.exe'
+        $script:GrandchildCommandLine = 'pwsh'
+
+        Get-TargetCli 100 | Should -Be 'unknown'
+    }
+
+    It 'detects claude from a quoted command line path' {
+        $script:ChildName = 'node.exe'
+        $script:ChildCommandLine = '"C:\Program Files\claude tools\claude.cmd" --resume'
+        $script:GrandchildName = 'pwsh.exe'
+        $script:GrandchildCommandLine = 'pwsh'
+
+        Get-TargetCli 100 | Should -Be 'claude'
+    }
+
+    It 'returns unknown when Get-CimInstance yields no processes' {
+        Mock Get-CimInstance -ModuleName HotshotCapture { @() }
+
+        Get-TargetCli 100 | Should -Be 'unknown'
+    }
+
+    It 'terminates on parent-pid cycles instead of looping forever' {
+        # A stale ParentProcessId can point back into the walked tree (PIDs
+        # are recycled on Windows); the seen-set must break the loop.
+        Mock Get-CimInstance -ModuleName HotshotCapture {
+            @(
+                [pscustomobject]@{ ProcessId = 100; ParentProcessId = 200; Name = 'WindowsTerminal.exe'; CommandLine = 'wt.exe' }
+                [pscustomobject]@{ ProcessId = 200; ParentProcessId = 100; Name = 'pwsh.exe'; CommandLine = 'pwsh' }
+            )
+        }
+
+        Get-TargetCli 100 | Should -Be 'unknown'
+    }
 }
 
 Describe 'Get-HotshotTypedText' {

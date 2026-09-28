@@ -53,6 +53,28 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lastTerminalName = windowTitle(for: app) ?? app.localizedName ?? "unknown"
     }
 
+    /// Seed the tracked terminal target from the frontmost application, or
+    /// failing that, the first running terminal, when no target is set yet.
+    /// Shared by launch-time seeding and the menu-open fallback so both
+    /// paths agree on what counts as "a terminal".
+    func seedTargetFromRunningApps(logPrefix: String) {
+        if let front = workspace.frontmostApplication,
+            let bid = front.bundleIdentifier,
+            TERMINAL_BUNDLE_IDS.contains(bid)
+        {
+            setTarget(front)
+            NSLog("Hotshot: \(logPrefix) seeded target = \(lastTerminalName ?? "unknown")")
+        } else {
+            for app in workspace.runningApplications where !app.isTerminated {
+                if let bid = app.bundleIdentifier, TERMINAL_BUNDLE_IDS.contains(bid) {
+                    setTarget(app)
+                    NSLog("Hotshot: \(logPrefix) found running terminal = \(lastTerminalName ?? "unknown")")
+                    break
+                }
+            }
+        }
+    }
+
     func windowTitle(for app: NSRunningApplication) -> String? {
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
         var focusedWindow: AnyObject?
@@ -73,21 +95,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setupStatusBar()
         observeAppActivation()
 
-        if let front = workspace.frontmostApplication,
-            let bid = front.bundleIdentifier,
-            TERMINAL_BUNDLE_IDS.contains(bid)
-        {
-            setTarget(front)
-            NSLog("Hotshot: seeded target = \(lastTerminalName ?? "unknown")")
-        } else {
-            for app in workspace.runningApplications where !app.isTerminated {
-                if let bid = app.bundleIdentifier, TERMINAL_BUNDLE_IDS.contains(bid) {
-                    setTarget(app)
-                    NSLog("Hotshot: seeded target from running apps = \(lastTerminalName ?? "unknown")")
-                    break
-                }
-            }
-        }
+        seedTargetFromRunningApps(logPrefix: "launch")
 
         NSLog("Hotshot: launched, screenshotDir=\(screenshotDir)")
 
@@ -189,20 +197,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         if lastTerminalBundleID == nil {
-            if let front = workspace.frontmostApplication,
-               let bid = front.bundleIdentifier,
-               TERMINAL_BUNDLE_IDS.contains(bid) {
-                setTarget(front)
-                NSLog("Hotshot: menuWillOpen seeded target = \(lastTerminalName ?? "unknown")")
-            } else {
-                for app in workspace.runningApplications where !app.isTerminated {
-                    if let bid = app.bundleIdentifier, TERMINAL_BUNDLE_IDS.contains(bid) {
-                        setTarget(app)
-                        NSLog("Hotshot: menuWillOpen found running terminal = \(lastTerminalName ?? "unknown")")
-                        break
-                    }
-                }
-            }
+            seedTargetFromRunningApps(logPrefix: "menuWillOpen")
         }
         updateTargetLabel()
     }

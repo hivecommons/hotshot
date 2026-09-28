@@ -19,7 +19,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Test
-        run: swift test
+        run: swift test --enable-code-coverage
+      - name: Coverage report
+        run: |
+          BIN="$(swift build --show-bin-path)"
+          PROF="$BIN/codecov/default.profdata"
+          XCT="$(find "$BIN" -name '*.xctest' -maxdepth 1 | head -1)"
+          xcrun llvm-cov report "$XCT/Contents/MacOS/$(basename "$XCT" .xctest)" \
+            -instr-profile "$PROF" \
+            -ignore-filename-regex 'Tests/' | tee coverage.txt
 
   shellcheck:
     name: ShellCheck (Linux scripts)

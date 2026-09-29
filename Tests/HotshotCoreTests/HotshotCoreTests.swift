@@ -192,6 +192,18 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertNil(trustedEnrichedClipboardPath("/tmp/a\u{2028}b.png") { _ in true })
     }
 
+    func testUserDefaultFallsBackToDefaultValueWhenUnset() {
+        let key = "test.UserDefault.\(UUID().uuidString)"
+        addTeardownBlock { UserDefaults.standard.removeObject(forKey: key) }
+
+        var flag = UserDefault(key, defaultValue: true)
+        XCTAssertTrue(flag.wrappedValue)
+
+        flag.wrappedValue = false
+        XCTAssertFalse(flag.wrappedValue)
+        XCTAssertEqual(UserDefaults.standard.object(forKey: key) as? Bool, false)
+    }
+
     private func makeDirectory() throws -> URL {
         let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent(".build")

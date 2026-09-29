@@ -196,15 +196,11 @@ final class HotshotCoreTests: XCTestCase {
         let key = "test.UserDefault.\(UUID().uuidString)"
         addTeardownBlock { UserDefaults.standard.removeObject(forKey: key) }
 
-        struct Holder {
-            @UserDefault(key, defaultValue: true)
-            var flag: Bool
-        }
-        var holder = Holder()
-        XCTAssertTrue(holder.flag)
+        var flag = UserDefault(key, defaultValue: true)
+        XCTAssertTrue(flag.wrappedValue)
 
-        holder.flag = false
-        XCTAssertFalse(holder.flag)
+        flag.wrappedValue = false
+        XCTAssertFalse(flag.wrappedValue)
         XCTAssertEqual(UserDefaults.standard.object(forKey: key) as? Bool, false)
     }
 

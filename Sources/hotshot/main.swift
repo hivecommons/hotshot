@@ -340,10 +340,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         try? FileManager.default.createDirectory(
             atPath: dir, withIntermediateDirectories: true)
 
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd-HHmmss"
-        let path = (dir as NSString).appendingPathComponent(
-            "hotshot-\(formatter.string(from: Date())).png")
+        let path = screenshotSavePath(directory: dir)
 
         do {
             try png.write(to: URL(fileURLWithPath: path))
@@ -417,15 +414,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @discardableResult
     func sendCtrlV(terminalBundleID bid: String) -> Bool {
-        let script = """
-            tell application id "\(bid)"
-                activate
-            end tell
-            delay \(REFOCUS_DELAY_SECONDS)
-            tell application "System Events"
-                keystroke "v" using {control down}
-            end tell
-            """
+        let script = ctrlVScript(bundleID: bid)
         NSLog("Hotshot: sending Ctrl-V to \(lastTerminalName ?? bid)")
         return runAppleScript(script)
     }
@@ -620,7 +609,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             task.waitUntilExit()
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             guard let out = String(data: data, encoding: .utf8) else { return [] }
-            return out.split(separator: "\n").map(String.init)
+            return parsePSOutput(out)
         } catch {
             return []
         }
@@ -670,57 +659,15 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func injectViaITerm2(_ path: String) -> Bool {
-        let escaped = appleScriptEscaped(path)
-        var script: String
-        if autoReturn {
-            script = """
-                tell application "iTerm2"
-                    tell current session of current window
-                        write text "\(escaped)"
-                    end tell
-                end tell
-                """
-        } else {
-            script = """
-                tell application "iTerm2"
-                    tell current session of current window
-                        write text "\(escaped)" newline NO
-                    end tell
-                end tell
-                """
-        }
-        if autoFocus {
-            script += """
-
-                tell application "iTerm2" to activate
-                """
-        }
+        let script = iterm2InjectionScript(text: path, autoReturn: autoReturn, autoFocus: autoFocus)
         NSLog("Hotshot: injecting into iTerm2, path=\(path)")
         NSLog("Hotshot: script=\(script)")
         return runAppleScript(script)
     }
 
     func injectViaGenericAppleScript(_ path: String, bundleID: String) -> Bool {
-        let escaped = appleScriptEscaped(path)
-        var script = """
-            tell application id "\(bundleID)"
-                activate
-            end tell
-            delay \(REFOCUS_DELAY_SECONDS)
-            tell application "System Events"
-                keystroke "\(escaped)"
-            """
-        if autoReturn {
-            script += """
-
-                    keystroke return
-                """
-        }
-        script += """
-
-            end tell
-            """
-        return runAppleScript(script)
+        return runAppleScript(
+            genericInjectionScript(text: path, bundleID: bundleID, autoReturn: autoReturn))
     }
 
     func focusTerminal(bundleID: String) {
@@ -750,12 +697,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func showNotification(title: String, body: String) {
         guard notifications else { return }
-        let escapedTitle = appleScriptEscaped(title)
-        let escapedBody = appleScriptEscaped(body)
-        let script = """
-            display notification "\(escapedBody)" with title "\(escapedTitle)"
-            """
-        runAppleScript(script)
+        runAppleScript(notificationScript(title: title, body: body))
     }
 }
 

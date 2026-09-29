@@ -49,6 +49,51 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertEqual(classifyCommands(["/Applications/CLAUDE"]), .claude)
     }
 
+    // MARK: - injectionTarget
+
+    func testInjectionTargetSelectsITerm2ForItsBundleID() {
+        XCTAssertEqual(injectionTarget(forBundleID: "com.googlecode.iterm2"), .iTerm2)
+    }
+
+    func testInjectionTargetSelectsGenericForOtherTerminals() {
+        XCTAssertEqual(injectionTarget(forBundleID: "com.apple.Terminal"), .generic)
+        XCTAssertEqual(injectionTarget(forBundleID: "dev.warp.Warp-Stable"), .generic)
+        XCTAssertEqual(injectionTarget(forBundleID: "unknown.bundle.id"), .generic)
+    }
+
+    // MARK: - resolveTargetCLI
+
+    func testResolveTargetCLIDefaultsToClaudeWhenTTYIsNil() {
+        let cli = resolveTargetCLI(ttyPath: nil) { _ in
+            XCTFail("commandsForTTY must not be called when the tty is unknown")
+            return []
+        }
+        XCTAssertEqual(cli, .claude)
+    }
+
+    func testResolveTargetCLIDefaultsToClaudeWhenTTYIsEmpty() {
+        let cli = resolveTargetCLI(ttyPath: "") { _ in
+            XCTFail("commandsForTTY must not be called when the tty is empty")
+            return []
+        }
+        XCTAssertEqual(cli, .claude)
+    }
+
+    func testResolveTargetCLIExtractsTTYBasenameAndClassifies() {
+        var seenTTY: String?
+        let cli = resolveTargetCLI(ttyPath: "/dev/ttys003") { tty in
+            seenTTY = tty
+            return ["/opt/homebrew/bin/copilot"]
+        }
+        XCTAssertEqual(seenTTY, "ttys003")
+        XCTAssertEqual(cli, .plainPath)
+    }
+
+    func testResolveTargetCLIFallsBackToClaudeWhenNoKnownCliRuns() {
+        let cli = resolveTargetCLI(ttyPath: "/dev/ttys003") { _ in ["zsh", "vim README.md"] }
+        XCTAssertEqual(cli, .claude)
+    }
+
     func testSnapshotScreenshotFilesFiltersByKnownImageExtensions() throws {
         let dir = try makeDirectory()
         try writeFile("one.png", in: dir)

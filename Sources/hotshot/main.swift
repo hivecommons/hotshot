@@ -616,20 +616,17 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Detect which CLI is running in the target terminal's focused session.
-    /// Falls back to .claude (the historical bracketed format) when the tty
-    /// cannot be determined or no known CLI is found.
+    /// Fetches the tty (AppleScript) and its commands (`ps`) as the only
+    /// side effects; the tty-to-CLI decision itself is `resolveTargetCLI`,
+    /// a pure HotshotCore function covered by unit tests.
     func detectTargetCLI(terminalBundleID bid: String) -> TargetCLI {
-        guard let script = ttyScript(forBundleID: bid),
-            let ttyPath = runAppleScriptForResult(script),
-            !ttyPath.isEmpty
-        else {
+        let ttyPath = ttyScript(forBundleID: bid).flatMap(runAppleScriptForResult)
+        if ttyPath == nil || ttyPath?.isEmpty == true {
             NSLog("Hotshot: cannot determine tty for \(bid); defaulting to bracketed format")
-            return .claude
         }
-        let tty = (ttyPath as NSString).lastPathComponent
-        let cli = classifyCommands(commands(onTTY: tty))
-        NSLog("Hotshot: tty=\(tty) detected CLI=\(String(describing: cli))")
-        return cli ?? .claude
+        let cli = resolveTargetCLI(ttyPath: ttyPath, commandsForTTY: { self.commands(onTTY: $0) })
+        NSLog("Hotshot: detected CLI=\(String(describing: cli)) for \(bid)")
+        return cli
     }
 
     @discardableResult
@@ -650,10 +647,10 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Type the format the CLI in the target session understands:
         // Claude Code expects "[path] "; GitHub Copilot CLI and friends
         // need a bare shell-escaped path (as Finder drag-and-drop inserts).
-        switch bid {
-        case "com.googlecode.iterm2":
+        switch injectionTarget(forBundleID: bid) {
+        case .iTerm2:
             return injectViaITerm2(text)
-        default:
+        case .generic:
             return injectViaGenericAppleScript(text, bundleID: bid)
         }
     }

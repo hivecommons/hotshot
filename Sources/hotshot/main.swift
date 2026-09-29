@@ -16,30 +16,20 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var clipboardTimer: Timer?
     var lastClipboardChangeCount: Int = 0
 
-    var autoFocus: Bool {
-        get { UserDefaults.standard.object(forKey: PREF_AUTO_FOCUS) as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: PREF_AUTO_FOCUS) }
-    }
+    @UserDefault(PREF_AUTO_FOCUS, defaultValue: true)
+    var autoFocus: Bool
 
-    var autoReturn: Bool {
-        get { UserDefaults.standard.object(forKey: PREF_AUTO_RETURN) as? Bool ?? false }
-        set { UserDefaults.standard.set(newValue, forKey: PREF_AUTO_RETURN) }
-    }
+    @UserDefault(PREF_AUTO_RETURN, defaultValue: false)
+    var autoReturn: Bool
 
-    var notifications: Bool {
-        get { UserDefaults.standard.object(forKey: PREF_NOTIFICATIONS) as? Bool ?? false }
-        set { UserDefaults.standard.set(newValue, forKey: PREF_NOTIFICATIONS) }
-    }
+    @UserDefault(PREF_NOTIFICATIONS, defaultValue: false)
+    var notifications: Bool
 
-    var autoWatch: Bool {
-        get { UserDefaults.standard.object(forKey: PREF_AUTO_WATCH) as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: PREF_AUTO_WATCH) }
-    }
+    @UserDefault(PREF_AUTO_WATCH, defaultValue: true)
+    var autoWatch: Bool
 
-    var clipboardWatch: Bool {
-        get { UserDefaults.standard.object(forKey: PREF_CLIPBOARD_WATCH) as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: PREF_CLIPBOARD_WATCH) }
-    }
+    @UserDefault(PREF_CLIPBOARD_WATCH, defaultValue: true)
+    var clipboardWatch: Bool
 
     var screenshotDir: String {
         get { UserDefaults.standard.string(forKey: PREF_SCREENSHOT_DIR) ?? macOSScreenshotLocation() }

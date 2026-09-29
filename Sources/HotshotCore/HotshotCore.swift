@@ -26,6 +26,28 @@ public let WATCH_FILE_AGE_MAX_SECONDS = 10.0
 public let CLIPBOARD_POLL_INTERVAL_SECONDS = 0.5
 public let PREF_SCREENSHOT_DIR = "hotshotScreenshotDir"
 
+// MARK: - Preferences storage
+
+/// Backs a `Bool` property with a `UserDefaults` value stored under `key`,
+/// falling back to `defaultValue` when the key has never been set.
+/// Collapses the five near-identical get/set pairs in `HotshotApp` into
+/// one-line declarations.
+@propertyWrapper
+public struct UserDefault {
+    public let key: String
+    public let defaultValue: Bool
+
+    public init(_ key: String, defaultValue: Bool) {
+        self.key = key
+        self.defaultValue = defaultValue
+    }
+
+    public var wrappedValue: Bool {
+        get { UserDefaults.standard.object(forKey: key) as? Bool ?? defaultValue }
+        set { UserDefaults.standard.set(newValue, forKey: key) }
+    }
+}
+
 public func normalizedMacOSScreenshotLocation(_ path: String?) -> String? {
     guard let path = path?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty else {
         return nil

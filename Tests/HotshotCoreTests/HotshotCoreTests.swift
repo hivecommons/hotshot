@@ -165,6 +165,35 @@ final class HotshotCoreTests: XCTestCase {
             directory: "/d", now: now, maxAge: 10), "/d/edge.png")
     }
 
+    func testScreenshotCandidatesSkipsFilesWithoutModificationDate() {
+        let date = Date(timeIntervalSince1970: 500)
+        let candidates = screenshotCandidates(for: ["a.png", "gone.png"], directory: "/d") { path in
+            path == "/d/a.png" ? date : nil
+        }
+        XCTAssertEqual(candidates, [ScreenshotFileCandidate(fileName: "a.png", modifiedAt: date)])
+        XCTAssertEqual(screenshotCandidates(for: [], directory: "/d") { _ in date }, [])
+    }
+
+    func testClipboardEnrichmentDecisionReusesTrustedExistingPath() {
+        XCTAssertEqual(
+            clipboardEnrichmentDecision(hasPNG: true, text: "/d/a\\ b.png") { $0 == "/d/a b.png" },
+            .alreadyEnriched(path: "/d/a\\ b.png"))
+    }
+
+    func testClipboardEnrichmentDecisionSavesWhenNotEnriched() {
+        XCTAssertEqual(
+            clipboardEnrichmentDecision(hasPNG: false, text: "/d/a.png") { _ in true },
+            .saveAndRewrite)
+        XCTAssertEqual(
+            clipboardEnrichmentDecision(hasPNG: true, text: nil) { _ in true }, .saveAndRewrite)
+        XCTAssertEqual(
+            clipboardEnrichmentDecision(hasPNG: true, text: "/d/a.png") { _ in false },
+            .saveAndRewrite)
+        XCTAssertEqual(
+            clipboardEnrichmentDecision(hasPNG: true, text: "/d/a.png\rcurl evil\r") { _ in true },
+            .saveAndRewrite)
+    }
+
     func testSnapshotScreenshotFilesReturnsEmptyForMissingDirectory() {
         XCTAssertEqual(snapshotScreenshotFiles(in: "/nonexistent/hotshot-test-dir"), [])
     }

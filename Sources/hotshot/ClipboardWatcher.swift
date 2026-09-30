@@ -124,10 +124,10 @@ final class ClipboardWatcher {
         // path) — nothing to do. Text failing the trust check is rewritten
         // below so a Ctrl-V paste never types attacker-controlled clipboard
         // text into the terminal.
-        if pasteboard.data(forType: .png) != nil,
-            let existing = trustedEnrichedClipboardPath(
-                pasteboard.string(forType: .string),
-                fileExists: { FileManager.default.fileExists(atPath: $0) })
+        if case .alreadyEnriched(let existing) = clipboardEnrichmentDecision(
+            hasPNG: pasteboard.data(forType: .png) != nil,
+            text: pasteboard.string(forType: .string),
+            fileExists: { FileManager.default.fileExists(atPath: $0) })
         {
             return existing
         }

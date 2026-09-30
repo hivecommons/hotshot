@@ -82,9 +82,11 @@ $cli = Get-TargetCli $termPid
 $text = Get-HotshotTypedText -ShotPath $shotPath -Cli $cli
 
 # --- 4. typed injection ---------------------------------------------------------
+$verboseLogging = Get-HotshotVerboseLogging
 if (-not $NoType) {
     if (-not $text) {
-        Write-Warning "hotshot: refusing to type a path containing control characters; path is $shotPath"
+        Write-Warning (Format-HotshotDiagnostic -Severity WARN -Event 'injection.control_chars_refused' `
+                -Detail "path=$(Get-RedactedPath -Path $shotPath -Verbose $verboseLogging)")
     } elseif ($termHwnd -ne [IntPtr]::Zero) {
         [void][Hotshot.Native]::SetForegroundWindow($termHwnd)
         Start-Sleep -Milliseconds 300
@@ -92,10 +94,10 @@ if (-not $NoType) {
         try {
             [System.Windows.Forms.SendKeys]::SendWait($escaped)
         } catch {
-            Write-Warning "hotshot: failed to type into the terminal: $_ (path: $shotPath)"
+            Write-Warning (Format-HotshotDiagnostic -Severity WARN -Event 'injection.sendkeys_failed' -Detail "$_")
         }
     } else {
-        Write-Warning "hotshot: no foreground terminal was recorded; path is $shotPath"
+        Write-Warning (Format-HotshotDiagnostic -Severity WARN -Event 'injection.no_foreground_terminal')
     }
 }
 

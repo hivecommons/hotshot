@@ -142,3 +142,47 @@ Describe 'ConvertTo-SendKeysEscaped' {
         ConvertTo-SendKeysEscaped -Text 'C:\Shots\one.png ' | Should -Be 'C:\Shots\one.png '
     }
 }
+
+Describe 'Get-HotshotVerboseLogging' {
+    AfterEach { Remove-Item Env:\HOTSHOT_VERBOSE_LOGGING -ErrorAction SilentlyContinue }
+
+    It 'is disabled when the env var is unset' {
+        Remove-Item Env:\HOTSHOT_VERBOSE_LOGGING -ErrorAction SilentlyContinue
+        Get-HotshotVerboseLogging | Should -Be $false
+    }
+
+    It 'is enabled only by an exact "1"' {
+        $env:HOTSHOT_VERBOSE_LOGGING = '1'
+        Get-HotshotVerboseLogging | Should -Be $true
+    }
+
+    It 'rejects other truthy-looking values' {
+        $env:HOTSHOT_VERBOSE_LOGGING = 'true'
+        Get-HotshotVerboseLogging | Should -Be $false
+    }
+}
+
+Describe 'Get-RedactedPath' {
+    It 'redacts the path by default (issue #77: no paths in normal diagnostics)' {
+        Get-RedactedPath -Path 'C:\Shots\one.png' -Verbose $false | Should -Be '<redacted>'
+    }
+
+    It 'reveals the path when verbose diagnostics are requested' {
+        Get-RedactedPath -Path 'C:\Shots\one.png' -Verbose $true | Should -Be 'C:\Shots\one.png'
+    }
+}
+
+Describe 'Format-HotshotDiagnostic' {
+    It 'formats a stable event name and severity without detail' {
+        Format-HotshotDiagnostic -Severity INFO -Event 'watcher.started' | Should -Be 'hotshot [INFO] watcher.started'
+    }
+
+    It 'appends detail when present' {
+        Format-HotshotDiagnostic -Severity WARN -Event 'injection.control_chars_refused' -Detail 'path=<redacted>' |
+            Should -Be 'hotshot [WARN] injection.control_chars_refused: path=<redacted>'
+    }
+
+    It 'omits the colon separator when detail is empty' {
+        Format-HotshotDiagnostic -Severity ERROR -Event 'clipboard.rewrite_failed' | Should -Be 'hotshot [ERROR] clipboard.rewrite_failed'
+    }
+}

@@ -51,6 +51,24 @@ die() {
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# Stable event-name diagnostic logger (parity with the macOS app / issue
+# #77): normal diagnostics never include screenshot directory paths,
+# filenames, or clipboard contents. Set HOTSHOT_VERBOSE_LOGGING=1 to include
+# them for local debugging; this stays local-only, no remote/telemetry flow.
+log_event() { # $1 = severity (INFO|WARN|ERROR), $2 = event, $3 = optional detail
+    echo "hotshot [$1] $2${3:+: $3}" >&2
+}
+
+# Redact a value that may reveal the screenshot directory/filename unless
+# HOTSHOT_VERBOSE_LOGGING=1 was set.
+redact() {
+    if [ "${HOTSHOT_VERBOSE_LOGGING:-}" = "1" ]; then
+        printf '%s' "$1"
+    else
+        printf '%s' "<redacted>"
+    fi
+}
+
 # --- session type -----------------------------------------------------------
 if [ -n "${WAYLAND_DISPLAY:-}" ] || [ "${XDG_SESSION_TYPE:-}" = "wayland" ]; then
     SESSION="wayland"
@@ -78,7 +96,7 @@ else
 fi
 
 # --- 1. capture --------------------------------------------------------------
-mkdir -p "$SHOT_DIR" || die "cannot create screenshot directory $SHOT_DIR"
+mkdir -p "$SHOT_DIR" || die "cannot create screenshot directory $(redact "$SHOT_DIR")"
 SHOT_PATH="$SHOT_DIR/hotshot-$(date +%Y%m%d-%H%M%S).png"
 
 if [ "$SESSION" = "x11" ]; then
@@ -117,21 +135,21 @@ fi
 if have copyq && copyq size >/dev/null 2>&1; then
     if ! copyq copy image/png - text/plain "$SHOT_PATH" <"$SHOT_PATH" >/dev/null 2>&1; then
         copyq copy image/png - <"$SHOT_PATH" >/dev/null 2>&1 ||
-            echo "hotshot: copyq failed to load the clipboard" >&2
+            log_event WARN clipboard.copyq_failed
     fi
 elif [ "$SESSION" = "x11" ]; then
     if have xclip; then
         xclip -selection clipboard -t image/png -i "$SHOT_PATH" ||
-            echo "hotshot: xclip failed to load the clipboard" >&2
+            log_event WARN clipboard.xclip_failed
     else
-        echo "hotshot: install 'xclip' to get the screenshot on the clipboard" >&2
+        log_event WARN clipboard.tool_missing "install 'xclip' to get the screenshot on the clipboard"
     fi
 else
     if have wl-copy; then
         wl-copy --type image/png <"$SHOT_PATH" ||
-            echo "hotshot: wl-copy failed to load the clipboard" >&2
+            log_event WARN clipboard.wl_copy_failed
     else
-        echo "hotshot: install 'wl-clipboard' to get the screenshot on the clipboard" >&2
+        log_event WARN clipboard.tool_missing "install 'wl-clipboard' to get the screenshot on the clipboard"
     fi
 fi
 
@@ -215,7 +233,7 @@ esac
 
 # --- 4. typed injection ------------------------------------------------------
 if [ "$DO_TYPE" = 1 ] && has_control_chars "$SHOT_PATH"; then
-    echo "hotshot: refusing to type a path containing control characters; screenshot saved" >&2
+    log_event WARN injection.control_chars_refused "screenshot saved"
     DO_TYPE=0
 fi
 if [ "$DO_TYPE" = 1 ]; then
@@ -223,21 +241,21 @@ if [ "$DO_TYPE" = 1 ]; then
         if have xdotool; then
             [ -n "$FOCUS_WIN" ] && xdotool windowactivate --sync "$FOCUS_WIN" 2>/dev/null
             xdotool type --delay 15 -- "$TEXT" ||
-                echo "hotshot: xdotool failed to type into the terminal" >&2
+                log_event WARN injection.xdotool_failed
         else
-            echo "hotshot: install 'xdotool' for typed injection; path is $SHOT_PATH" >&2
+            log_event WARN injection.tool_missing "install 'xdotool' for typed injection; path=$(redact "$SHOT_PATH")"
         fi
     else
         # The compositor returns focus to the previously focused window when
         # the slurp overlay closes, so type into whatever is focused now.
         if have wtype; then
             wtype -d 15 -- "$TEXT" ||
-                echo "hotshot: wtype failed to type into the terminal" >&2
+                log_event WARN injection.wtype_failed
         elif have ydotool; then
             ydotool type --key-delay 15 -- "$TEXT" ||
-                echo "hotshot: ydotool failed (is ydotoold running?)" >&2
+                log_event WARN injection.ydotool_failed "is ydotoold running?"
         else
-            echo "hotshot: install 'wtype' (or 'ydotool') for typed injection; path is $SHOT_PATH" >&2
+            log_event WARN injection.tool_missing "install 'wtype' (or 'ydotool') for typed injection; path=$(redact "$SHOT_PATH")"
         fi
     fi
 fi

@@ -26,6 +26,21 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return watcher
     }()
 
+    lazy var terminalInjector: TerminalInjector = {
+        TerminalInjector(
+            diagnostic: { [unowned self] event, severity, path, script, detail in
+                self.diag(event, severity: severity, path: path, script: script, detail: detail)
+            },
+            loadPasteboard: { [unowned self] path in
+                self.clipboardWatcher.loadPasteboard(withFile: path)
+            },
+            autoReturn: { [unowned self] in self.autoReturn },
+            autoFocus: { [unowned self] in self.autoFocus },
+            notificationsEnabled: { [unowned self] in self.notifications },
+            verboseDiagnostics: { [unowned self] in self.verboseDiagnostics }
+        )
+    }()
+
     @UserDefault(PREF_AUTO_FOCUS, defaultValue: true)
     var autoFocus: Bool
 
@@ -290,7 +305,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 body: "Could not save the clipboard image \u{2014} paste skipped")
             return
         }
-        sendCtrlV(terminalBundleID: bid)
+        terminalInjector.sendCtrlV(terminalBundleID: bid, terminalName: lastTerminalName)
         showNotification(title: "Hotshot", body: "Clipboard image injected via Ctrl-V")
     }
 
@@ -322,22 +337,15 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
-        let injected = sendCtrlV(terminalBundleID: bid)
+        let injected = terminalInjector.sendCtrlV(terminalBundleID: bid, terminalName: lastTerminalName)
         if autoFocus {
-            focusTerminal(bundleID: bid)
+            terminalInjector.focusTerminal(bundleID: bid)
         }
         if injected {
             showNotification(title: "Hotshot", body: "Clipboard image injected via Ctrl-V")
         } else {
             showNotification(title: "Hotshot", body: "Injection FAILED \u{2014} allow Hotshot to control your terminal: System Settings \u{2192} Privacy & Security \u{2192} Automation")
         }
-    }
-
-    @discardableResult
-    func sendCtrlV(terminalBundleID bid: String) -> Bool {
-        let script = ctrlVScript(bundleID: bid)
-        NSLog("Hotshot: sending Ctrl-V to \(lastTerminalName ?? bid)")
-        return runAppleScript(script)
     }
 
     @objc func injectLastScreenshot() {
@@ -353,9 +361,9 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         diag("screenshot.inject_last", path: latest)
-        injectPath(latest, terminalBundleID: bid)
+        terminalInjector.injectPath(latest, terminalBundleID: bid)
         if autoFocus {
-            focusTerminal(bundleID: bid)
+            terminalInjector.focusTerminal(bundleID: bid)
         }
         showNotification(title: "Hotshot", body: "Injected \u{2192} \(latest)")
     }
@@ -456,9 +464,9 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
-        let injected = injectPath(path, terminalBundleID: bid)
+        let injected = terminalInjector.injectPath(path, terminalBundleID: bid)
         if autoFocus {
-            focusTerminal(bundleID: bid)
+            terminalInjector.focusTerminal(bundleID: bid)
         }
         if injected {
             showNotification(title: "Hotshot", body: "Auto-injected \u{2192} \((path as NSString).lastPathComponent)")
@@ -518,117 +526,8 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Path Injection
 
-    func runAppleScriptForResult(_ source: String) -> String? {
-        var error: NSDictionary?
-        guard let script = NSAppleScript(source: source) else { return nil }
-        let result = script.executeAndReturnError(&error)
-        if error != nil { return nil }
-        return result.stringValue
-    }
-
-    /// List the commands of processes attached to a tty (e.g. "ttys003").
-    func commands(onTTY tty: String) -> [String] {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/ps")
-        task.arguments = ["-t", tty, "-o", "command="]
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = Pipe()
-        do {
-            try task.run()
-            task.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            guard let out = String(data: data, encoding: .utf8) else { return [] }
-            return parsePSOutput(out)
-        } catch {
-            return []
-        }
-    }
-
-    /// Detect which CLI is running in the target terminal's focused session.
-    /// Fetches the tty (AppleScript) and its commands (`ps`) as the only
-    /// side effects; the tty-to-CLI decision itself is `resolveTargetCLI`,
-    /// a pure HotshotCore function covered by unit tests.
-    func detectTargetCLI(terminalBundleID bid: String) -> TargetCLI {
-        let ttyPath = ttyScript(forBundleID: bid).flatMap(runAppleScriptForResult)
-        if ttyPath == nil || ttyPath?.isEmpty == true {
-            NSLog("Hotshot: cannot determine tty for \(bid); defaulting to bracketed format")
-        }
-        let cli = resolveTargetCLI(ttyPath: ttyPath, commandsForTTY: { self.commands(onTTY: $0) })
-        NSLog("Hotshot: detected CLI=\(String(describing: cli)) for \(bid)")
-        return cli
-    }
-
-    @discardableResult
-    func injectPath(_ path: String, terminalBundleID bid: String) -> Bool {
-        let targetCLI = detectTargetCLI(terminalBundleID: bid)
-        guard let text = typedScreenshotText(path: path, targetCLI: targetCLI) else {
-            diag("injection.control_chars_refused", severity: .warn, path: path)
-            showNotification(
-                title: "Hotshot",
-                body: "Refused to inject a file whose name contains control characters")
-            return false
-        }
-        // Load the pasteboard with image + file URL + plain-text path so
-        // CLIs that read the clipboard (GitHub Copilot CLI via ⌘V, Claude
-        // Code via Ctrl-V) can consume the screenshot too.
-        clipboardWatcher.loadPasteboard(withFile: path)
-
-        // Type the format the CLI in the target session understands:
-        // Claude Code expects "[path] "; GitHub Copilot CLI and friends
-        // need a bare shell-escaped path (as Finder drag-and-drop inserts).
-        switch injectionTarget(forBundleID: bid) {
-        case .iTerm2:
-            return injectViaITerm2(text)
-        case .generic:
-            return injectViaGenericAppleScript(text, bundleID: bid)
-        }
-    }
-
-    func injectViaITerm2(_ path: String) -> Bool {
-        let script = iterm2InjectionScript(text: path, autoReturn: autoReturn, autoFocus: autoFocus)
-        diag("injection.iterm2", path: path)
-        if verboseDiagnostics {
-            diag("injection.iterm2.script", severity: .info, script: script)
-        }
-        return runAppleScript(script)
-    }
-
-    func injectViaGenericAppleScript(_ path: String, bundleID: String) -> Bool {
-        return runAppleScript(
-            genericInjectionScript(text: path, bundleID: bundleID, autoReturn: autoReturn))
-    }
-
-    func focusTerminal(bundleID: String) {
-        let script = """
-            tell application id "\(bundleID)"
-                activate
-            end tell
-            """
-        runAppleScript(script)
-    }
-
-    @discardableResult
-    func runAppleScript(_ source: String) -> Bool {
-        var error: NSDictionary?
-        if let script = NSAppleScript(source: source) {
-            let result = script.executeAndReturnError(&error)
-            if let err = error {
-                diag("applescript.error", severity: .error, detail: "\(err)")
-                return false
-            }
-            if verboseDiagnostics {
-                diag("applescript.result", severity: .info, path: result.stringValue ?? "(none)")
-            }
-            return true
-        }
-        diag("applescript.unavailable", severity: .error)
-        return false
-    }
-
     func showNotification(title: String, body: String) {
-        guard notifications else { return }
-        runAppleScript(notificationScript(title: title, body: body))
+        terminalInjector.showNotification(title: title, body: body)
     }
 }
 

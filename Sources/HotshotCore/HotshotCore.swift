@@ -170,6 +170,19 @@ public func newScreenshotFiles(previous: Set<String>, current: Set<String>) -> S
     current.subtracting(previous)
 }
 
+/// Build candidates for newly seen files, skipping any whose modification
+/// date cannot be read (e.g. the file vanished between snapshot and lookup).
+public func screenshotCandidates(
+    for fileNames: Set<String>,
+    directory: String,
+    modificationDate: (String) -> Date?
+) -> [ScreenshotFileCandidate] {
+    fileNames.compactMap { file in
+        let fullPath = (directory as NSString).appendingPathComponent(file)
+        return modificationDate(fullPath).map { ScreenshotFileCandidate(fileName: file, modifiedAt: $0) }
+    }
+}
+
 public func newestInjectableScreenshot(
     from candidates: [ScreenshotFileCandidate],
     directory: String,
@@ -310,6 +323,27 @@ public func trustedEnrichedClipboardPath(
         fileExists(text.replacingOccurrences(of: "\\", with: ""))
     else { return nil }
     return text
+}
+
+/// What to do with the clipboard when an image lands on it.
+public enum ClipboardEnrichmentDecision: Equatable {
+    /// Already carries a PNG plus a trusted existing path; use this path as-is.
+    case alreadyEnriched(path: String)
+    /// Save the image to disk and rewrite the pasteboard.
+    case saveAndRewrite
+}
+
+/// Decide whether the clipboard is already enriched. Untrusted text is never
+/// reused, so a Ctrl-V paste cannot type attacker-controlled clipboard text.
+public func clipboardEnrichmentDecision(
+    hasPNG: Bool,
+    text: String?,
+    fileExists: (String) -> Bool
+) -> ClipboardEnrichmentDecision {
+    guard hasPNG, let existing = trustedEnrichedClipboardPath(text, fileExists: fileExists) else {
+        return .saveAndRewrite
+    }
+    return .alreadyEnriched(path: existing)
 }
 
 /// Escape a string for embedding in an AppleScript double-quoted literal.

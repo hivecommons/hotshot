@@ -9,10 +9,6 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var lastTerminalPID: pid_t?
     var lastTerminalName: String?
     var workspace = NSWorkspace.shared
-    var watcherSource: DispatchSourceFileSystemObject?
-    var watcherFD: Int32 = -1
-    var lastSeenScreenshots: Set<String> = []
-    var watchDebounceTimer: DispatchSourceTimer?
 
     lazy var clipboardWatcher: ClipboardWatcher = {
         let watcher = ClipboardWatcher(
@@ -22,6 +18,19 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             })
         watcher.onImageDetected = { [unowned self] count in
             self.handleClipboardImage(changeCount: count)
+        }
+        return watcher
+    }()
+
+    lazy var screenshotWatcher: ScreenshotWatcher = {
+        let watcher = ScreenshotWatcher(
+            screenshotDirectory: { [unowned self] in self.screenshotDir },
+            verboseDiagnostics: { [unowned self] in self.verboseDiagnostics },
+            diagnostic: { [unowned self] event, severity, path, count in
+                self.diag(event, severity: severity, path: path, count: count)
+            })
+        watcher.onNewScreenshot = { [unowned self] path in
+            self.handleNewScreenshot(path)
         }
         return watcher
     }()
@@ -370,94 +379,11 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Screenshot Folder Watcher
 
-    func startWatchingScreenshots() {
-        stopWatchingScreenshots()
+    func startWatchingScreenshots() { screenshotWatcher.start() }
 
-        let dir = (screenshotDir as NSString).expandingTildeInPath
-        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    func stopWatchingScreenshots() { screenshotWatcher.stop() }
 
-        lastSeenScreenshots = snapshotScreenshotFiles(in: dir)
-
-        let fd = open(dir, O_EVTONLY)
-        guard fd >= 0 else {
-            diag("watcher.open_failed", severity: .error, path: dir)
-            return
-        }
-        watcherFD = fd
-
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: [.write, .rename, .link, .attrib],
-            queue: DispatchQueue.main
-        )
-
-        source.setEventHandler { [weak self] in
-            self?.handleDirectoryChange()
-        }
-
-        source.setCancelHandler {
-            close(fd)
-        }
-
-        source.resume()
-        watcherSource = source
-        diag("watcher.started", path: dir)
-    }
-
-    func stopWatchingScreenshots() {
-        watchDebounceTimer?.cancel()
-        watchDebounceTimer = nil
-        watcherSource?.cancel()
-        watcherSource = nil
-        watcherFD = -1
-        NSLog("Hotshot: stopped watching for screenshots")
-    }
-
-    func handleDirectoryChange() {
-        // Verbose-only: this fires on every filesystem event, so normal
-        // diagnostics stay bounded to the debounced outcome logged below.
-        if verboseDiagnostics {
-            diag("watcher.directory_change", severity: .info)
-        }
-        watchDebounceTimer?.cancel()
-        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
-        timer.schedule(deadline: .now() + WATCH_DEBOUNCE_SECONDS)
-        timer.setEventHandler { [weak self] in
-            self?.checkForNewScreenshots()
-        }
-        timer.resume()
-        watchDebounceTimer = timer
-    }
-
-    func checkForNewScreenshots() {
-        let dir = (screenshotDir as NSString).expandingTildeInPath
-        let current = snapshotScreenshotFiles(in: dir)
-        let newFiles = newScreenshotFiles(previous: lastSeenScreenshots, current: current)
-        lastSeenScreenshots = current
-
-        // Bounded, per-debounced-cycle: only log when there is something to
-        // report, and only a count in normal diagnostics — filenames may be
-        // revealing and are never included unless HOTSHOT_VERBOSE_LOGGING=1.
-        guard !newFiles.isEmpty else { return }
-        diag("watcher.new_files", count: newFiles.count)
-        if verboseDiagnostics {
-            diag("watcher.new_files", severity: .info, path: newFiles.sorted().joined(separator: ", "))
-        }
-
-        let fm = FileManager.default
-        var candidates: [ScreenshotFileCandidate] = []
-
-        for file in newFiles {
-            let fullPath = (dir as NSString).appendingPathComponent(file)
-            guard let attrs = try? fm.attributesOfItem(atPath: fullPath),
-                  let modified = attrs[.modificationDate] as? Date else { continue }
-            candidates.append(ScreenshotFileCandidate(fileName: file, modifiedAt: modified))
-        }
-
-        guard let path = newestInjectableScreenshot(from: candidates, directory: dir) else { return }
-
-        diag("watcher.new_screenshot", path: path)
-
+    func handleNewScreenshot(_ path: String) {
         guard let bid = lastTerminalBundleID else {
             NSLog("Hotshot: new screenshot detected but no terminal tracked")
             showNotification(title: "Hotshot", body: "Screenshot detected but no terminal session tracked")

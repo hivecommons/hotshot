@@ -313,14 +313,23 @@ public func typedScreenshotText(path: String, targetCLI: TargetCLI) -> String? {
 /// enriched plain-text path accompanying a clipboard image. The text is
 /// trusted only when it is free of control characters (so a Ctrl-V paste can
 /// never press Return or emit escape sequences) and, once the drag-and-drop
-/// backslash escapes are removed, names an existing file.
+/// backslash escapes are removed, names an existing `hotshot-*.png` file
+/// directly inside the screenshot directory (hotshot's own output).
 public func trustedEnrichedClipboardPath(
     _ text: String?,
+    directory: String,
     fileExists: (String) -> Bool
 ) -> String? {
-    guard let text,
-        !containsControlCharacters(text),
-        fileExists(text.replacingOccurrences(of: "\\", with: ""))
+    guard let text, !containsControlCharacters(text) else { return nil }
+    let unescaped = text.replacingOccurrences(of: "\\", with: "")
+    let ns = unescaped as NSString
+    var dir = directory
+    while dir.count > 1 && dir.hasSuffix("/") { dir.removeLast() }
+    let name = ns.lastPathComponent
+    guard ns.deletingLastPathComponent == dir,
+        name.hasPrefix("hotshot-"),
+        name.lowercased().hasSuffix(".png"),
+        fileExists(unescaped)
     else { return nil }
     return text
 }
@@ -338,9 +347,13 @@ public enum ClipboardEnrichmentDecision: Equatable {
 public func clipboardEnrichmentDecision(
     hasPNG: Bool,
     text: String?,
+    directory: String,
     fileExists: (String) -> Bool
 ) -> ClipboardEnrichmentDecision {
-    guard hasPNG, let existing = trustedEnrichedClipboardPath(text, fileExists: fileExists) else {
+    guard hasPNG,
+        let existing = trustedEnrichedClipboardPath(
+            text, directory: directory, fileExists: fileExists)
+    else {
         return .saveAndRewrite
     }
     return .alreadyEnriched(path: existing)

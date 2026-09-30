@@ -127,6 +127,7 @@ final class ClipboardWatcher {
         if case .alreadyEnriched(let existing) = clipboardEnrichmentDecision(
             hasPNG: pasteboard.data(forType: .png) != nil,
             text: pasteboard.string(forType: .string),
+            directory: (screenshotDirectory() as NSString).expandingTildeInPath,
             fileExists: { FileManager.default.fileExists(atPath: $0) })
         {
             return existing

@@ -120,13 +120,16 @@ final class ClipboardWatcher {
     /// Returns the saved path, or nil if there was no image to save.
     @discardableResult
     func enrichWithSavedImage() -> String? {
-        // Already enriched (image + control-character-free existing file
-        // path) — nothing to do. Text failing the trust check is rewritten
-        // below so a Ctrl-V paste never types attacker-controlled clipboard
-        // text into the terminal.
+        let dir = (screenshotDirectory() as NSString).expandingTildeInPath
+
+        // Already enriched (image + control-character-free hotshot-*.png
+        // path inside our own screenshot folder) — nothing to do. Any other
+        // text is rewritten below so a Ctrl-V paste never types
+        // attacker-controlled clipboard text into the terminal.
         if case .alreadyEnriched(let existing) = clipboardEnrichmentDecision(
             hasPNG: pasteboard.data(forType: .png) != nil,
             text: pasteboard.string(forType: .string),
+            screenshotDirectory: dir,
             fileExists: { FileManager.default.fileExists(atPath: $0) })
         {
             return existing
@@ -134,7 +137,6 @@ final class ClipboardWatcher {
 
         guard let png = pngData() else { return nil }
 
-        let dir = (screenshotDirectory() as NSString).expandingTildeInPath
         try? FileManager.default.createDirectory(
             atPath: dir, withIntermediateDirectories: true)
 

@@ -310,17 +310,30 @@ public func typedScreenshotText(path: String, targetCLI: TargetCLI) -> String? {
 }
 
 /// Decide whether text already on the clipboard can be trusted as the
-/// enriched plain-text path accompanying a clipboard image. The text is
-/// trusted only when it is free of control characters (so a Ctrl-V paste can
-/// never press Return or emit escape sequences) and, once the drag-and-drop
-/// backslash escapes are removed, names an existing file.
+/// enriched plain-text path accompanying a clipboard image. Only hotshot's
+/// own enrichment qualifies: the text must be free of control characters
+/// (so a Ctrl-V paste can never press Return or emit escape sequences) and,
+/// once the drag-and-drop backslash escapes are removed, name an existing
+/// `hotshot-*.png` file directly inside `screenshotDirectory` — the only
+/// shape `writePasteboard` ever produces. Any other text (including paths
+/// to unrelated existing files an attacker can predict, like /etc/passwd)
+/// is untrusted, so the caller rewrites the pasteboard before any paste.
 public func trustedEnrichedClipboardPath(
     _ text: String?,
+    screenshotDirectory: String,
     fileExists: (String) -> Bool
 ) -> String? {
-    guard let text,
-        !containsControlCharacters(text),
-        fileExists(text.replacingOccurrences(of: "\\", with: ""))
+    guard let text, !containsControlCharacters(text) else { return nil }
+    let unescaped = text.replacingOccurrences(of: "\\", with: "")
+    let dir = ((screenshotDirectory as NSString).expandingTildeInPath as NSString)
+        .standardizingPath
+    let parent = ((unescaped as NSString).deletingLastPathComponent as NSString)
+        .standardizingPath
+    let name = (unescaped as NSString).lastPathComponent
+    guard parent == dir,
+        name.hasPrefix("hotshot-"),
+        name.lowercased().hasSuffix(".png"),
+        fileExists(unescaped)
     else { return nil }
     return text
 }
@@ -338,9 +351,13 @@ public enum ClipboardEnrichmentDecision: Equatable {
 public func clipboardEnrichmentDecision(
     hasPNG: Bool,
     text: String?,
+    screenshotDirectory: String,
     fileExists: (String) -> Bool
 ) -> ClipboardEnrichmentDecision {
-    guard hasPNG, let existing = trustedEnrichedClipboardPath(text, fileExists: fileExists) else {
+    guard hasPNG,
+        let existing = trustedEnrichedClipboardPath(
+            text, screenshotDirectory: screenshotDirectory, fileExists: fileExists)
+    else {
         return .saveAndRewrite
     }
     return .alreadyEnriched(path: existing)

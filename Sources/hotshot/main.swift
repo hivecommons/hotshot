@@ -13,8 +13,18 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var watcherFD: Int32 = -1
     var lastSeenScreenshots: Set<String> = []
     var watchDebounceTimer: DispatchSourceTimer?
-    var clipboardTimer: Timer?
-    var lastClipboardChangeCount: Int = 0
+
+    lazy var clipboardWatcher: ClipboardWatcher = {
+        let watcher = ClipboardWatcher(
+            screenshotDirectory: { [unowned self] in self.screenshotDir },
+            diagnostic: { [unowned self] event, severity, path, detail in
+                self.diag(event, severity: severity, path: path, detail: detail)
+            })
+        watcher.onImageDetected = { [unowned self] count in
+            self.handleClipboardImage(changeCount: count)
+        }
+        return watcher
+    }()
 
     @UserDefault(PREF_AUTO_FOCUS, defaultValue: true)
     var autoFocus: Bool
@@ -267,13 +277,13 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
-        guard clipboardHasImage() else {
+        guard clipboardWatcher.hasImage() else {
             showNotification(title: "Hotshot", body: "No image on clipboard")
             return
         }
 
         NSLog("Hotshot: manually injecting clipboard image via Ctrl-V")
-        guard enrichClipboardWithSavedImage() != nil else {
+        guard clipboardWatcher.enrichWithSavedImage() != nil else {
             NSLog("Hotshot: could not save/enrich clipboard image; refusing to paste untrusted clipboard")
             showNotification(
                 title: "Hotshot",
@@ -286,142 +296,19 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Clipboard Watcher
 
-    func clipboardHasImage() -> Bool {
-        let pb = NSPasteboard.general
-        return pb.canReadItem(withDataConformingToTypes: [
-            "public.png", "public.tiff", "public.jpeg",
-        ])
-    }
+    func startWatchingClipboard() { clipboardWatcher.start() }
 
-    func clipboardPNGData() -> Data? {
-        let pb = NSPasteboard.general
-        if let png = pb.data(forType: .png) { return png }
-        if let tiff = pb.data(forType: .tiff),
-            let rep = NSBitmapImageRep(data: tiff),
-            let png = rep.representation(using: .png, properties: [:])
-        {
-            return png
-        }
-        if let jpeg = pb.data(forType: NSPasteboard.PasteboardType("public.jpeg")),
-            let rep = NSBitmapImageRep(data: jpeg),
-            let png = rep.representation(using: .png, properties: [:])
-        {
-            return png
-        }
-        return nil
-    }
+    func stopWatchingClipboard() { clipboardWatcher.stop() }
 
-    /// Write a single pasteboard item carrying the PNG image (Claude Code
-    /// reads image data on Ctrl-V), a file URL (Finder-copy equivalence), and
-    /// a shell-escaped plain-text POSIX path (GitHub Copilot CLI and other
-    /// CLIs paste the path as text) all at once.
-    func writePasteboard(pngData: Data, path: String) {
-        let item = NSPasteboardItem()
-        item.setData(pngData, forType: .png)
-        item.setString(URL(fileURLWithPath: path).absoluteString, forType: .fileURL)
-        item.setString(shellEscapedPath(path), forType: .string)
-
-        let pb = NSPasteboard.general
-        pb.clearContents()
-        pb.writeObjects([item])
-        // Don't let the clipboard watcher re-trigger on our own write.
-        lastClipboardChangeCount = pb.changeCount
-        diag("pasteboard.loaded", path: path)
-    }
-
-    /// Load an on-disk screenshot onto the pasteboard (image + URL + path).
-    func loadPasteboard(withFile path: String) {
-        guard let data = FileManager.default.contents(atPath: path) else {
-            diag("pasteboard.read_failed", severity: .warn, path: path)
-            return
-        }
-        let png: Data
-        if (path as NSString).pathExtension.lowercased() == "png" {
-            png = data
-        } else if let rep = NSBitmapImageRep(data: data),
-            let converted = rep.representation(using: .png, properties: [:])
-        {
-            png = converted
-        } else {
-            diag("pasteboard.png_conversion_failed", severity: .warn, path: path)
-            return
-        }
-        writePasteboard(pngData: png, path: path)
-    }
-
-    /// Save the clipboard image to the screenshot folder and rewrite the
-    /// pasteboard with image + file URL + plain-text path representations.
-    /// Returns the saved path, or nil if there was no image to save.
-    @discardableResult
-    func enrichClipboardWithSavedImage() -> String? {
-        let pb = NSPasteboard.general
-
-        // Already enriched (image + control-character-free existing file
-        // path) — nothing to do. Text failing the trust check is rewritten
-        // below so a Ctrl-V paste never types attacker-controlled clipboard
-        // text into the terminal.
-        if pb.data(forType: .png) != nil,
-            let existing = trustedEnrichedClipboardPath(
-                pb.string(forType: .string),
-                fileExists: { FileManager.default.fileExists(atPath: $0) })
-        {
-            return existing
-        }
-
-        guard let png = clipboardPNGData() else { return nil }
-
-        let dir = (screenshotDir as NSString).expandingTildeInPath
-        try? FileManager.default.createDirectory(
-            atPath: dir, withIntermediateDirectories: true)
-
-        let path = screenshotSavePath(directory: dir)
-
-        do {
-            try png.write(to: URL(fileURLWithPath: path))
-        } catch {
-            diag("clipboard.save_failed", severity: .error, path: path, detail: "\(error)")
-            return nil
-        }
-
-        writePasteboard(pngData: png, path: path)
-        return path
-    }
-
-    func startWatchingClipboard() {
-        stopWatchingClipboard()
-        lastClipboardChangeCount = NSPasteboard.general.changeCount
-        clipboardTimer = Timer.scheduledTimer(
-            timeInterval: CLIPBOARD_POLL_INTERVAL_SECONDS,
-            target: self,
-            selector: #selector(checkClipboard),
-            userInfo: nil,
-            repeats: true
-        )
-        NSLog("Hotshot: started watching clipboard for images")
-    }
-
-    func stopWatchingClipboard() {
-        clipboardTimer?.invalidate()
-        clipboardTimer = nil
-        NSLog("Hotshot: stopped watching clipboard")
-    }
-
-    @objc func checkClipboard() {
-        let pb = NSPasteboard.general
-        let currentCount = pb.changeCount
-        guard currentCount != lastClipboardChangeCount else { return }
-        lastClipboardChangeCount = currentCount
-
-        guard clipboardHasImage() else { return }
-
-        NSLog("Hotshot: clipboard image detected (changeCount=\(currentCount))")
+    func handleClipboardImage(changeCount: Int) {
+        NSLog("Hotshot: clipboard image detected (changeCount=\(changeCount))")
 
         // Save to disk and add a plain-text path + file URL alongside the
         // image so both image-paste (Claude Code) and text-paste (GitHub
         // Copilot CLI) consumers work. If the image cannot be saved and the
         // clipboard rewritten, DO NOT paste: Ctrl-V would type whatever
         // text/plain the clipboard's author put alongside the image.
-        guard enrichClipboardWithSavedImage() != nil else {
+        guard clipboardWatcher.enrichWithSavedImage() != nil else {
             NSLog("Hotshot: could not save/enrich clipboard image; refusing to auto-paste untrusted clipboard")
             showNotification(
                 title: "Hotshot",
@@ -685,7 +572,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Load the pasteboard with image + file URL + plain-text path so
         // CLIs that read the clipboard (GitHub Copilot CLI via ⌘V, Claude
         // Code via Ctrl-V) can consume the screenshot too.
-        loadPasteboard(withFile: path)
+        clipboardWatcher.loadPasteboard(withFile: path)
 
         // Type the format the CLI in the target session understands:
         // Claude Code expects "[path] "; GitHub Copilot CLI and friends

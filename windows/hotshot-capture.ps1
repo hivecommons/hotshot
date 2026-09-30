@@ -86,7 +86,7 @@ $verboseLogging = Get-HotshotVerboseLogging
 if (-not $NoType) {
     if (-not $text) {
         Write-Warning (Format-HotshotDiagnostic -Severity WARN -Event 'injection.control_chars_refused' `
-                -Detail "path=$(Get-RedactedPath -Path $shotPath -Verbose $verboseLogging)")
+                -Detail "path=$(Get-RedactedPath -Path $shotPath -VerboseLogging $verboseLogging)")
     } elseif ($termHwnd -ne [IntPtr]::Zero) {
         [void][Hotshot.Native]::SetForegroundWindow($termHwnd)
         Start-Sleep -Milliseconds 300

@@ -86,9 +86,9 @@ function Get-RedactedPath {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [AllowEmptyString()] [string]$Path,
-        [bool]$Verbose = (Get-HotshotVerboseLogging)
+        [bool]$VerboseLogging = (Get-HotshotVerboseLogging)
     )
-    if ($Verbose) { return $Path }
+    if ($VerboseLogging) { return $Path }
     return '<redacted>'
 }
 

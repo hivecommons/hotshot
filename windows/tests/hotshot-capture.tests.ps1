@@ -164,11 +164,11 @@ Describe 'Get-HotshotVerboseLogging' {
 
 Describe 'Get-RedactedPath' {
     It 'redacts the path by default (issue #77: no paths in normal diagnostics)' {
-        Get-RedactedPath -Path 'C:\Shots\one.png' -Verbose $false | Should -Be '<redacted>'
+        Get-RedactedPath -Path 'C:\Shots\one.png' -VerboseLogging $false | Should -Be '<redacted>'
     }
 
     It 'reveals the path when verbose diagnostics are requested' {
-        Get-RedactedPath -Path 'C:\Shots\one.png' -Verbose $true | Should -Be 'C:\Shots\one.png'
+        Get-RedactedPath -Path 'C:\Shots\one.png' -VerboseLogging $true | Should -Be 'C:\Shots\one.png'
     }
 }
 

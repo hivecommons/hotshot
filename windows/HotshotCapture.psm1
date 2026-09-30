@@ -70,4 +70,38 @@ function ConvertTo-SendKeysEscaped {
         }) -join ''
 }
 
-Export-ModuleMember -Function Get-TargetCli, Get-HotshotTypedText, ConvertTo-SendKeysEscaped
+# --- Diagnostic logging (issue #77) -------------------------------------------
+# Normal diagnostics must never contain screenshot directory paths,
+# filenames, generated scripts, or clipboard contents. Set
+# HOTSHOT_VERBOSE_LOGGING=1 to opt into raw values for local debugging; this
+# stays local-only (no exporter or network flow).
+
+function Get-HotshotVerboseLogging {
+    [CmdletBinding()]
+    param()
+    return $env:HOTSHOT_VERBOSE_LOGGING -eq '1'
+}
+
+function Get-RedactedPath {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [AllowEmptyString()] [string]$Path,
+        [bool]$VerboseLogging = (Get-HotshotVerboseLogging)
+    )
+    if ($VerboseLogging) { return $Path }
+    return '<redacted>'
+}
+
+function Format-HotshotDiagnostic {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [ValidateSet('INFO', 'WARN', 'ERROR')] [string]$Severity,
+        [Parameter(Mandatory)] [string]$Event,
+        [string]$Detail
+    )
+    if ($Detail) { return "hotshot [$Severity] ${Event}: $Detail" }
+    return "hotshot [$Severity] $Event"
+}
+
+Export-ModuleMember -Function Get-TargetCli, Get-HotshotTypedText, ConvertTo-SendKeysEscaped, `
+    Get-HotshotVerboseLogging, Get-RedactedPath, Format-HotshotDiagnostic

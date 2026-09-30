@@ -56,6 +56,8 @@ eval "$(extract_fn shell_escape)"
 eval "$(extract_fn has_control_chars)"
 eval "$(extract_fn descendants)"
 eval "$(extract_fn classify_cli)"
+eval "$(extract_fn log_event)"
+eval "$(extract_fn redact)"
 
 # ==============================================================================
 # shell_escape
@@ -99,6 +101,27 @@ has_control_chars "/tmp/a$(printf '\342\200\250')b/hotshot-1.png"
 check "has_control_chars: U+2028 line separator -> yes" $?
 has_control_chars "/tmp/a$(printf '\342\200\251')b/hotshot-1.png"
 check "has_control_chars: U+2029 paragraph separator -> yes" $?
+
+# ==============================================================================
+# log_event / redact (issue #77: bounded, redacted local diagnostics)
+# ==============================================================================
+assert_eq "log_event: formats stable event + severity, no detail" \
+    "hotshot [INFO] watcher.started" \
+    "$(log_event INFO watcher.started 2>&1)"
+assert_eq "log_event: appends detail when present" \
+    "hotshot [WARN] injection.tool_missing: install 'xdotool'" \
+    "$(log_event WARN injection.tool_missing "install 'xdotool'" 2>&1)"
+assert_eq "log_event: omits colon for empty detail" \
+    "hotshot [ERROR] clipboard.copyq_failed" \
+    "$(log_event ERROR clipboard.copyq_failed "" 2>&1)"
+
+assert_eq "redact: hides the value by default" \
+    "<redacted>" "$(redact '/home/u/Pictures/hotshot/shot-1.png')"
+assert_eq "redact: reveals the value under HOTSHOT_VERBOSE_LOGGING=1" \
+    "/home/u/Pictures/hotshot/shot-1.png" \
+    "$(HOTSHOT_VERBOSE_LOGGING=1 redact '/home/u/Pictures/hotshot/shot-1.png')"
+assert_eq "redact: does not treat other truthy values as opt-in" \
+    "<redacted>" "$(HOTSHOT_VERBOSE_LOGGING=true redact '/tmp/hotshot/shot-1.png')"
 
 # ==============================================================================
 # descendants / classify_cli against a real /proc tree
@@ -266,7 +289,7 @@ assert_eq "e2e control-char dir: exit 0" "0" "$rc"
 check "e2e control-char dir: screenshot still created" $?
 [ ! -e "$TYPELOG" ]
 check "e2e control-char dir: nothing typed" $?
-grep -q "refusing to type a path containing control characters" "$TMP/e2e-ctrl.err"
+grep -q "injection.control_chars_refused" "$TMP/e2e-ctrl.err"
 check "e2e control-char dir: refusal warning printed" $?
 
 # Capture failure (maim dies) -> script dies, no typing.
@@ -505,7 +528,7 @@ EOF
 shot="$(run_e2e_stubs "$CQSTUBS" "$plain_root" --full 2>"$TMP/cq.err")"
 rc=$?
 assert_eq "e2e copyq total failure: exit 0 (clipboard is best-effort)" "0" "$rc"
-grep -q "copyq failed to load the clipboard" "$TMP/cq.err"
+grep -q "clipboard.copyq_failed" "$TMP/cq.err"
 check "e2e copyq total failure: warning names copyq" $?
 ok=1; [ -s "$shot" ] && ok=0
 check "e2e copyq total failure: screenshot still created" "$ok"
@@ -538,7 +561,8 @@ grep -q "install 'xclip'" "$TMP/noxclip.err"
 check "e2e no xclip: warning names xclip" $?
 assert_eq "e2e no xclip: still types the path" "[$shot] " "$(cat "$TYPELOG")"
 
-# X11 without xdotool -> no focus, no typing; warning carries the path.
+# X11 without xdotool -> no focus, no typing; warning names the tool but
+# redacts the path from normal diagnostics (issue #77).
 NOXDO="$TMP/noxdo"
 mkdir -p "$NOXDO"
 cp "$STUBS/maim" "$STUBS/xclip" "$NOXDO/"
@@ -548,9 +572,19 @@ assert_eq "e2e no xdotool: exit 0" "0" "$rc"
 grep -q "install 'xdotool' for typed injection" "$TMP/noxdo.err"
 check "e2e no xdotool: warning suggests xdotool" $?
 grep -q -- "$shot" "$TMP/noxdo.err"
-check "e2e no xdotool: warning includes the screenshot path" $?
+ok=$?; [ "$ok" -eq 0 ] && ok=1 || ok=0
+check "e2e no xdotool: warning redacts the screenshot path by default" "$ok"
+grep -q -- "path=<redacted>" "$TMP/noxdo.err"
+check "e2e no xdotool: warning carries a stable redacted marker" $?
 ok=1; [ ! -e "$TYPELOG" ] && ok=0
 check "e2e no xdotool: nothing typed" "$ok"
+
+# Same as above, but HOTSHOT_VERBOSE_LOGGING=1 opts back into the raw path.
+shot_v="$(env -i HOME="$HOME" DISPLAY=:99 PATH="$NOXDO:/usr/bin:/bin" \
+    HOTSHOT_DIR="$TMP/vshots" HOTSHOT_TEST_FOCUS_PID="$plain_root" \
+    HOTSHOT_VERBOSE_LOGGING=1 bash "$SCRIPT" --full 2>"$TMP/noxdo-verbose.err")"
+grep -q -- "$shot_v" "$TMP/noxdo-verbose.err"
+check "e2e no xdotool: HOTSHOT_VERBOSE_LOGGING=1 reveals the path" $?
 
 # xdotool present but `type` fails -> warning, capture still succeeds.
 FAILTYPE="$TMP/failtype"
@@ -569,7 +603,7 @@ chmod +x "$FAILTYPE/xdotool"
 shot="$(run_e2e_stubs "$FAILTYPE" "$plain_root" --full 2>"$TMP/failtype.err")"
 rc=$?
 assert_eq "e2e xdotool type failure: exit 0" "0" "$rc"
-grep -q "xdotool failed to type" "$TMP/failtype.err"
+grep -q "injection.xdotool_failed" "$TMP/failtype.err"
 check "e2e xdotool type failure: warning emitted" $?
 ok=1; [ -s "$shot" ] && ok=0
 check "e2e xdotool type failure: screenshot still created and echoed" "$ok"
@@ -589,7 +623,8 @@ grep -q "install 'wl-clipboard'" "$TMP/nowlcopy.err"
 check "e2e wayland no wl-copy: warning names wl-clipboard" $?
 assert_eq "e2e wayland no wl-copy: still types the path" "[$shot] " "$(cat "$TYPELOG")"
 
-# Wayland without wtype or ydotool -> warning carries the path, nothing typed.
+# Wayland without wtype or ydotool -> warning names the tool but redacts
+# the path from normal diagnostics (issue #77).
 NOTYPER="$TMP/notyper"
 mkdir -p "$NOTYPER"
 cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wl-copy" "$WSTUBS/swaymsg" "$NOTYPER/"
@@ -603,9 +638,20 @@ assert_eq "e2e wayland no typing tool: exit 0" "0" "$rc"
 grep -q "install 'wtype'" "$TMP/notyper.err"
 check "e2e wayland no typing tool: warning suggests wtype" $?
 grep -q -- "$shot" "$TMP/notyper.err"
-check "e2e wayland no typing tool: warning includes the path" $?
+ok=$?; [ "$ok" -eq 0 ] && ok=1 || ok=0
+check "e2e wayland no typing tool: warning redacts the screenshot path by default" "$ok"
+grep -q -- "path=<redacted>" "$TMP/notyper.err"
+check "e2e wayland no typing tool: warning carries a stable redacted marker" $?
 ok=1; [ ! -e "$TYPELOG" ] && ok=0
 check "e2e wayland no typing tool: nothing typed" "$ok"
+
+# Same as above, but HOTSHOT_VERBOSE_LOGGING=1 opts back into the raw path.
+shot_v="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+    PATH="$NOTYPER:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wvshots" \
+    HOTSHOT_TEST_FOCUS_PID="$plain_root" HOTSHOT_VERBOSE_LOGGING=1 \
+    bash "$SCRIPT" --full 2>"$TMP/notyper-verbose.err")"
+grep -q -- "$shot_v" "$TMP/notyper-verbose.err"
+check "e2e wayland no typing tool: HOTSHOT_VERBOSE_LOGGING=1 reveals the path" $?
 
 # wtype present but fails -> warning, capture still succeeds.
 FAILWTYPE="$TMP/failwtype"
@@ -620,7 +666,7 @@ shot="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" 
     bash "$SCRIPT" --full 2>"$TMP/failwtype.err")"
 rc=$?
 assert_eq "e2e wayland wtype failure: exit 0" "0" "$rc"
-grep -q "wtype failed to type" "$TMP/failwtype.err"
+grep -q "injection.wtype_failed" "$TMP/failwtype.err"
 check "e2e wayland wtype failure: warning emitted" $?
 ok=1; [ -s "$shot" ] && ok=0
 check "e2e wayland wtype failure: screenshot still created" "$ok"

@@ -36,6 +36,40 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         set { UserDefaults.standard.set(newValue, forKey: PREF_SCREENSHOT_DIR) }
     }
 
+    /// Cached once per process; verbosity is controlled by the
+    /// HOTSHOT_VERBOSE_LOGGING env var at launch, not by app state.
+    lazy var verboseDiagnostics: Bool = verboseDiagnosticsEnabled()
+
+    /// Emit a stable, local-only diagnostic line (see HotshotCore.diagnosticLine).
+    /// `path` and `script` may reveal screenshot directory paths, filenames,
+    /// generated AppleScript, or clipboard text, so both are redacted unless
+    /// HOTSHOT_VERBOSE_LOGGING=1 is set. `count` and `detail` are for
+    /// non-sensitive, bounded information (e.g. a file count or an
+    /// AppleScript error description) that is always safe in normal logs.
+    func diag(
+        _ event: String,
+        severity: DiagnosticSeverity = .info,
+        path: String? = nil,
+        script: String? = nil,
+        count: Int? = nil,
+        detail: String? = nil
+    ) {
+        var parts: [String] = []
+        if let path {
+            parts.append(redacted(path, verbose: verboseDiagnostics))
+        }
+        if let script {
+            parts.append(redacted(script, verbose: verboseDiagnostics))
+        }
+        if let count {
+            parts.append("\(count) file(s)")
+        }
+        if let detail {
+            parts.append(detail)
+        }
+        let joinedDetail = parts.isEmpty ? nil : parts.joined(separator: ", ")
+        NSLog(diagnosticLine(event: event, severity: severity, detail: joinedDetail))
+    }
 
     func setTarget(_ app: NSRunningApplication) {
         lastTerminalBundleID = app.bundleIdentifier
@@ -87,7 +121,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         seedTargetFromRunningApps(logPrefix: "launch")
 
-        NSLog("Hotshot: launched, screenshotDir=\(screenshotDir)")
+        diag("app.launched", path: screenshotDir)
 
         if autoWatch {
             startWatchingScreenshots()
@@ -292,13 +326,13 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pb.writeObjects([item])
         // Don't let the clipboard watcher re-trigger on our own write.
         lastClipboardChangeCount = pb.changeCount
-        NSLog("Hotshot: pasteboard loaded with image + path \(path)")
+        diag("pasteboard.loaded", path: path)
     }
 
     /// Load an on-disk screenshot onto the pasteboard (image + URL + path).
     func loadPasteboard(withFile path: String) {
         guard let data = FileManager.default.contents(atPath: path) else {
-            NSLog("Hotshot: could not read \(path) for pasteboard")
+            diag("pasteboard.read_failed", severity: .warn, path: path)
             return
         }
         let png: Data
@@ -309,7 +343,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         {
             png = converted
         } else {
-            NSLog("Hotshot: could not convert \(path) to PNG for pasteboard")
+            diag("pasteboard.png_conversion_failed", severity: .warn, path: path)
             return
         }
         writePasteboard(pngData: png, path: path)
@@ -345,7 +379,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         do {
             try png.write(to: URL(fileURLWithPath: path))
         } catch {
-            NSLog("Hotshot: failed to save clipboard image to \(path): \(error)")
+            diag("clipboard.save_failed", severity: .error, path: path, detail: "\(error)")
             return nil
         }
 
@@ -431,7 +465,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
-        NSLog("Hotshot: injecting last screenshot: \(latest)")
+        diag("screenshot.inject_last", path: latest)
         injectPath(latest, terminalBundleID: bid)
         if autoFocus {
             focusTerminal(bundleID: bid)
@@ -451,7 +485,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let fd = open(dir, O_EVTONLY)
         guard fd >= 0 else {
-            NSLog("Hotshot: failed to open directory for watching: \(dir)")
+            diag("watcher.open_failed", severity: .error, path: dir)
             return
         }
         watcherFD = fd
@@ -472,7 +506,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         source.resume()
         watcherSource = source
-        NSLog("Hotshot: started watching \(dir) for new screenshots")
+        diag("watcher.started", path: dir)
     }
 
     func stopWatchingScreenshots() {
@@ -485,7 +519,11 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func handleDirectoryChange() {
-        NSLog("Hotshot: directory change detected, debouncing...")
+        // Verbose-only: this fires on every filesystem event, so normal
+        // diagnostics stay bounded to the debounced outcome logged below.
+        if verboseDiagnostics {
+            diag("watcher.directory_change", severity: .info)
+        }
         watchDebounceTimer?.cancel()
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
         timer.schedule(deadline: .now() + WATCH_DEBOUNCE_SECONDS)
@@ -502,9 +540,14 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let newFiles = newScreenshotFiles(previous: lastSeenScreenshots, current: current)
         lastSeenScreenshots = current
 
-        NSLog("Hotshot: checking for new screenshots, found \(newFiles.count) new file(s)")
+        // Bounded, per-debounced-cycle: only log when there is something to
+        // report, and only a count in normal diagnostics — filenames may be
+        // revealing and are never included unless HOTSHOT_VERBOSE_LOGGING=1.
         guard !newFiles.isEmpty else { return }
-        NSLog("Hotshot: new files: \(newFiles)")
+        diag("watcher.new_files", count: newFiles.count)
+        if verboseDiagnostics {
+            diag("watcher.new_files", severity: .info, path: newFiles.sorted().joined(separator: ", "))
+        }
 
         let fm = FileManager.default
         var candidates: [ScreenshotFileCandidate] = []
@@ -518,7 +561,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         guard let path = newestInjectableScreenshot(from: candidates, directory: dir) else { return }
 
-        NSLog("Hotshot: watcher detected new screenshot: \(path)")
+        diag("watcher.new_screenshot", path: path)
 
         guard let bid = lastTerminalBundleID else {
             NSLog("Hotshot: new screenshot detected but no terminal tracked")
@@ -633,7 +676,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func injectPath(_ path: String, terminalBundleID bid: String) -> Bool {
         let targetCLI = detectTargetCLI(terminalBundleID: bid)
         guard let text = typedScreenshotText(path: path, targetCLI: targetCLI) else {
-            NSLog("Hotshot: REFUSING to inject path with control characters: \(path.debugDescription)")
+            diag("injection.control_chars_refused", severity: .warn, path: path)
             showNotification(
                 title: "Hotshot",
                 body: "Refused to inject a file whose name contains control characters")
@@ -657,8 +700,10 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func injectViaITerm2(_ path: String) -> Bool {
         let script = iterm2InjectionScript(text: path, autoReturn: autoReturn, autoFocus: autoFocus)
-        NSLog("Hotshot: injecting into iTerm2, path=\(path)")
-        NSLog("Hotshot: script=\(script)")
+        diag("injection.iterm2", path: path)
+        if verboseDiagnostics {
+            diag("injection.iterm2.script", severity: .info, script: script)
+        }
         return runAppleScript(script)
     }
 
@@ -682,13 +727,15 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let script = NSAppleScript(source: source) {
             let result = script.executeAndReturnError(&error)
             if let err = error {
-                NSLog("Hotshot: AppleScript ERROR: \(err)")
+                diag("applescript.error", severity: .error, detail: "\(err)")
                 return false
             }
-            NSLog("Hotshot: AppleScript OK, result=\(result.stringValue ?? "(none)")")
+            if verboseDiagnostics {
+                diag("applescript.result", severity: .info, path: result.stringValue ?? "(none)")
+            }
             return true
         }
-        NSLog("Hotshot: failed to create NSAppleScript")
+        diag("applescript.unavailable", severity: .error)
         return false
     }
 

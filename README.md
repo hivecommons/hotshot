@@ -142,6 +142,9 @@ Clipboard mode works with remote sessions (tmux, zellij, OpenShell) as long as t
 **Can I use it with VS Code's integrated terminal?**
 Not yet — VS Code's terminal isn't a standalone app. For VS Code, try [vscode-terminal-image-paste](https://github.com/cybersader/vscode-terminal-image-paste).
 
+**What does hotshot log, and where does it go?**
+Diagnostics stay local (Console.app / `stderr`, never sent anywhere) and normally omit screenshot directory paths, filenames, generated AppleScript, and clipboard contents — just stable event names and severities, e.g. `Hotshot [WARN] injection.control_chars_refused`. Set `HOTSHOT_VERBOSE_LOGGING=1` before launching hotshot (or the Linux/Windows capture scripts) to include the redacted values for local debugging.
+
 ## Technical details
 
 Single Swift file (~600 lines), compiled to a native macOS binary. Zero dependencies — no frameworks, no packages, no runtime requirements. Just Apple's built-in APIs:

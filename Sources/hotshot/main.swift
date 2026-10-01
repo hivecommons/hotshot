@@ -1,6 +1,11 @@
 import AppKit
 import HotshotCore
 
+/// Shared body for every injection failure so the manual menu actions and
+/// the automatic watchers point at the same Automation-permission fix.
+let INJECTION_FAILED_NOTIFICATION_BODY =
+    "Injection FAILED \u{2014} allow Hotshot to control your terminal: System Settings \u{2192} Privacy & Security \u{2192} Automation"
+
 // MARK: - App Delegate
 
 class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -314,8 +319,15 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 body: "Could not save the clipboard image \u{2014} paste skipped")
             return
         }
-        terminalInjector.sendCtrlV(terminalBundleID: bid, terminalName: lastTerminalName)
-        showNotification(title: "Hotshot", body: "Clipboard image injected via Ctrl-V")
+        let injected = terminalInjector.sendCtrlV(terminalBundleID: bid, terminalName: lastTerminalName)
+        if autoFocus {
+            terminalInjector.focusTerminal(bundleID: bid)
+        }
+        if injected {
+            showNotification(title: "Hotshot", body: "Clipboard image injected via Ctrl-V")
+        } else {
+            showNotification(title: "Hotshot", body: INJECTION_FAILED_NOTIFICATION_BODY)
+        }
     }
 
     // MARK: - Clipboard Watcher
@@ -353,7 +365,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if injected {
             showNotification(title: "Hotshot", body: "Clipboard image injected via Ctrl-V")
         } else {
-            showNotification(title: "Hotshot", body: "Injection FAILED \u{2014} allow Hotshot to control your terminal: System Settings \u{2192} Privacy & Security \u{2192} Automation")
+            showNotification(title: "Hotshot", body: INJECTION_FAILED_NOTIFICATION_BODY)
         }
     }
 
@@ -370,11 +382,15 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         diag("screenshot.inject_last", path: latest)
-        terminalInjector.injectPath(latest, terminalBundleID: bid)
+        let injected = terminalInjector.injectPath(latest, terminalBundleID: bid)
         if autoFocus {
             terminalInjector.focusTerminal(bundleID: bid)
         }
-        showNotification(title: "Hotshot", body: "Injected \u{2192} \(latest)")
+        if injected {
+            showNotification(title: "Hotshot", body: "Injected \u{2192} \(latest)")
+        } else {
+            showNotification(title: "Hotshot", body: INJECTION_FAILED_NOTIFICATION_BODY)
+        }
     }
 
     // MARK: - Screenshot Folder Watcher
@@ -397,7 +413,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if injected {
             showNotification(title: "Hotshot", body: "Auto-injected \u{2192} \((path as NSString).lastPathComponent)")
         } else {
-            showNotification(title: "Hotshot", body: "Injection FAILED \u{2014} allow Hotshot to control your terminal: System Settings \u{2192} Privacy & Security \u{2192} Automation")
+            showNotification(title: "Hotshot", body: INJECTION_FAILED_NOTIFICATION_BODY)
         }
     }
 

@@ -124,6 +124,50 @@ final class HotshotCoreTests: XCTestCase {
         )
     }
 
+    func testIsHiddenScreenshotFileNameFlagsDotfilesOnly() {
+        XCTAssertTrue(isHiddenScreenshotFileName(".Screenshot 2026-10-01 at 09.41.12.png"))
+        XCTAssertTrue(isHiddenScreenshotFileName(".DS_Store"))
+        XCTAssertFalse(isHiddenScreenshotFileName("Screenshot 2026-10-01 at 09.41.12.png"))
+        XCTAssertFalse(isHiddenScreenshotFileName("hotshot-20260925.png"))
+        XCTAssertFalse(isHiddenScreenshotFileName("dots.in.name.png"))
+    }
+
+    func testSnapshotScreenshotFilesSkipsHiddenInProgressCaptures() throws {
+        let dir = try makeDirectory()
+        try writeFile(".Screenshot 2026-10-01 at 09.41.12.png", in: dir)
+        try writeFile("Screenshot 2026-10-01 at 09.40.00.png", in: dir)
+
+        XCTAssertEqual(
+            snapshotScreenshotFiles(in: dir.path), ["Screenshot 2026-10-01 at 09.40.00.png"])
+    }
+
+    func testFindMostRecentScreenshotSkipsNewerHiddenInProgressCapture() throws {
+        let dir = try makeDirectory()
+        let visible = try writeFile("Screenshot 2026-10-01 at 09.40.00.png", in: dir)
+        let hidden = try writeFile(".Screenshot 2026-10-01 at 09.41.12.png", in: dir)
+
+        try setModificationDate(Date(timeIntervalSince1970: 100), for: visible)
+        try setModificationDate(Date(timeIntervalSince1970: 200), for: hidden)
+
+        XCTAssertEqual(findMostRecentScreenshot(in: dir.path), visible.path)
+    }
+
+    func testNewestInjectableScreenshotSkipsHiddenInProgressCapture() {
+        let dir = "/Users/me/Desktop"
+        let now = Date(timeIntervalSince1970: 1_000)
+        let hiddenOnly = [
+            ScreenshotFileCandidate(fileName: ".Screenshot 2026-10-01 at 09.41.12.png", modifiedAt: now)
+        ]
+        XCTAssertNil(newestInjectableScreenshot(from: hiddenOnly, directory: dir, now: now, maxAge: 10))
+
+        let mixed = hiddenOnly + [
+            ScreenshotFileCandidate(fileName: "older.png", modifiedAt: now.addingTimeInterval(-3))
+        ]
+        XCTAssertEqual(
+            newestInjectableScreenshot(from: mixed, directory: dir, now: now, maxAge: 10),
+            "/Users/me/Desktop/older.png")
+    }
+
     func testNewestInjectableScreenshotFiltersStaleAndHotshotOwnedFiles() {
         let dir = "/Users/me/Desktop"
         let now = Date(timeIntervalSince1970: 1_000)

@@ -130,6 +130,7 @@ public func findMostRecentScreenshot(in dir: String) -> String? {
     var newestDate = Date.distantPast
 
     for file in files {
+        guard !isHiddenScreenshotFileName(file) else { continue }
         let ext = (file as NSString).pathExtension.lowercased()
         guard SCREENSHOT_EXTENSIONS.contains(ext) else { continue }
         let fullPath = (dir as NSString).appendingPathComponent(file)
@@ -148,6 +149,7 @@ public func snapshotScreenshotFiles(in dir: String) -> Set<String> {
     guard let files = try? fm.contentsOfDirectory(atPath: dir) else { return [] }
     var result = Set<String>()
     for file in files {
+        guard !isHiddenScreenshotFileName(file) else { continue }
         let ext = (file as NSString).pathExtension.lowercased()
         if SCREENSHOT_EXTENSIONS.contains(ext) {
             result.insert(file)
@@ -168,6 +170,15 @@ public struct ScreenshotFileCandidate: Equatable {
 
 public func newScreenshotFiles(previous: Set<String>, current: Set<String>) -> Set<String> {
     current.subtracting(previous)
+}
+
+/// True for dotfile names. macOS writes a capture to the screenshot folder
+/// as a hidden `.Screenshot … .png` while the floating thumbnail is shown
+/// and renames it to the visible name when the thumbnail dismisses, so a
+/// hidden name is an in-progress capture whose path is about to vanish and
+/// must never be snapshotted, injected, or treated as the last screenshot.
+public func isHiddenScreenshotFileName(_ name: String) -> Bool {
+    name.hasPrefix(".")
 }
 
 /// Build candidates for newly seen files, skipping any whose modification
@@ -191,6 +202,7 @@ public func newestInjectableScreenshot(
 ) -> String? {
     let newest = candidates
         .filter { !$0.fileName.hasPrefix("hotshot-") }
+        .filter { !isHiddenScreenshotFileName($0.fileName) }
         .filter { now.timeIntervalSince($0.modifiedAt) < maxAge }
         .max { $0.modifiedAt < $1.modifiedAt }
     guard let newest else { return nil }

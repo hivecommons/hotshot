@@ -73,3 +73,11 @@ powershell -ExecutionPolicy Bypass -File hotshot-capture.ps1 [-NoType] [-Dir C:\
   spaces — the Windows drag-and-drop equivalent.
 - **No file watcher**: the hotkey performs capture + inject in one step.
   Win+Shift+S and other native shortcuts are unaffected.
+
+## Logging
+
+Diagnostics are written as stable event names and severities and normally
+omit the screenshot directory, filenames, and other local values — matching
+the macOS app. Set the `HOTSHOT_VERBOSE_LOGGING=1` environment variable
+before running `hotshot-capture.ps1` to include the redacted values for
+local debugging. This stays local only; no telemetry is sent anywhere.

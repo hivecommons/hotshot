@@ -94,3 +94,12 @@ hotshot-capture [--region|--full] [--no-type] [--dir DIR]
 - **No file watcher**: the hotkey performs capture + inject in one step, so
   there is nothing to watch. Your DE's native screenshot shortcuts are
   unaffected.
+
+## Logging
+
+Diagnostics go to `stderr` as stable event names and severities (e.g.
+`hotshot [WARN] injection.control_chars_refused`) and normally omit the
+screenshot directory, filenames, and other local values — matching the macOS
+app. Set `HOTSHOT_VERBOSE_LOGGING=1` before running `hotshot-capture.sh` to
+include the redacted values for local debugging. This stays local only; no
+telemetry is sent anywhere.

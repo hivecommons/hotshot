@@ -145,7 +145,15 @@ final class ClipboardWatcher {
         do {
             try png.write(to: URL(fileURLWithPath: path))
         } catch {
-            diagnostic("clipboard.save_failed", .error, path, "\(error)")
+            // Foundation write errors carry NSFilePath/the filename in their
+            // description, which would bypass the redaction applied to `path`.
+            // Log only domain+code unless verbose diagnostics were requested.
+            let nsError = error as NSError
+            let detail =
+                verboseDiagnosticsEnabled()
+                ? "\(error)"
+                : "\(nsError.domain) code=\(nsError.code)"
+            diagnostic("clipboard.save_failed", .error, path, detail)
             return nil
         }
 

@@ -28,6 +28,21 @@ jobs:
           xcrun llvm-cov report "$XCT/Contents/MacOS/$(basename "$XCT" .xctest)" \
             -instr-profile "$PROF" \
             -ignore-filename-regex 'Tests/' | tee coverage.txt
+      - name: Coverage gate (HotshotCore lines >= 90%)
+        run: |
+          BIN="$(swift build --show-bin-path)"
+          PROF="$BIN/codecov/default.profdata"
+          XCT="$(find "$BIN" -name '*.xctest' -maxdepth 1 | head -1)"
+          PCT="$(xcrun llvm-cov export "$XCT/Contents/MacOS/$(basename "$XCT" .xctest)" \
+            -instr-profile "$PROF" \
+            -ignore-filename-regex 'Tests/' \
+            -summary-only \
+            | python3 -c 'import json,sys; print(round(json.load(sys.stdin)["data"][0]["totals"]["lines"]["percent"], 2))')"
+          echo "HotshotCore line coverage: ${PCT}% (floor 90%)"
+          if ! python3 -c "import sys; sys.exit(0 if float('${PCT}') >= 90 else 1)"; then
+            echo "::error::HotshotCore line coverage ${PCT}% is below the 90% floor"
+            exit 1
+          fi
 
   shellcheck:
     name: ShellCheck (Linux scripts)

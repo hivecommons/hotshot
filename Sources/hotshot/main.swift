@@ -320,14 +320,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         let injected = terminalInjector.sendCtrlV(terminalBundleID: bid, terminalName: lastTerminalName)
-        if autoFocus {
-            terminalInjector.focusTerminal(bundleID: bid)
-        }
-        if injected {
-            showNotification(title: "Hotshot", body: "Clipboard image injected via Ctrl-V")
-        } else {
-            showNotification(title: "Hotshot", body: INJECTION_FAILED_NOTIFICATION_BODY)
-        }
+        completeInjection(injected, successBody: "Clipboard image injected via Ctrl-V", bundleID: bid)
     }
 
     // MARK: - Clipboard Watcher
@@ -359,14 +352,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         let injected = terminalInjector.sendCtrlV(terminalBundleID: bid, terminalName: lastTerminalName)
-        if autoFocus {
-            terminalInjector.focusTerminal(bundleID: bid)
-        }
-        if injected {
-            showNotification(title: "Hotshot", body: "Clipboard image injected via Ctrl-V")
-        } else {
-            showNotification(title: "Hotshot", body: INJECTION_FAILED_NOTIFICATION_BODY)
-        }
+        completeInjection(injected, successBody: "Clipboard image injected via Ctrl-V", bundleID: bid)
     }
 
     @objc func injectLastScreenshot() {
@@ -383,14 +369,7 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         diag("screenshot.inject_last", path: latest)
         let injected = terminalInjector.injectPath(latest, terminalBundleID: bid)
-        if autoFocus {
-            terminalInjector.focusTerminal(bundleID: bid)
-        }
-        if injected {
-            showNotification(title: "Hotshot", body: "Injected \u{2192} \(latest)")
-        } else {
-            showNotification(title: "Hotshot", body: INJECTION_FAILED_NOTIFICATION_BODY)
-        }
+        completeInjection(injected, successBody: "Injected \u{2192} \(latest)", bundleID: bid)
     }
 
     // MARK: - Screenshot Folder Watcher
@@ -407,14 +386,10 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         let injected = terminalInjector.injectPath(path, terminalBundleID: bid)
-        if autoFocus {
-            terminalInjector.focusTerminal(bundleID: bid)
-        }
-        if injected {
-            showNotification(title: "Hotshot", body: "Auto-injected \u{2192} \((path as NSString).lastPathComponent)")
-        } else {
-            showNotification(title: "Hotshot", body: INJECTION_FAILED_NOTIFICATION_BODY)
-        }
+        completeInjection(
+            injected,
+            successBody: "Auto-injected \u{2192} \((path as NSString).lastPathComponent)",
+            bundleID: bid)
     }
 
     @objc func chooseScreenshotDir() {
@@ -470,6 +445,20 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func showNotification(title: String, body: String) {
         terminalInjector.showNotification(title: title, body: body)
+    }
+
+    /// Shared tail of every injection call site: focus the terminal (when
+    /// `autoFocus` is on) and post a notification — `successBody` on
+    /// success, or the shared `INJECTION_FAILED_NOTIFICATION_BODY` on
+    /// failure. Collapses the four near-identical focus/notify blocks that
+    /// used to follow each `terminalInjector.sendCtrlV`/`injectPath` call.
+    func completeInjection(_ injected: Bool, successBody: String, bundleID bid: String) {
+        if autoFocus {
+            terminalInjector.focusTerminal(bundleID: bid)
+        }
+        showNotification(
+            title: "Hotshot",
+            body: injected ? successBody : INJECTION_FAILED_NOTIFICATION_BODY)
     }
 }
 

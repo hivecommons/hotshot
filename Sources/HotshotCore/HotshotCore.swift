@@ -311,12 +311,31 @@ public func containsControlCharacters(_ s: String) -> Bool {
     return false
 }
 
+/// Characters that make a typed word run or redirect when a POSIX shell
+/// reads it: command substitution (`$`, backtick), command separators
+/// (`;`, `|`, `&`) and redirections (`<`, `>`). None of them appear in
+/// macOS's own screenshot names.
+let SHELL_COMMAND_METACHARACTERS: Set<Character> = ["$", "`", ";", "|", "&", "<", ">"]
+
+/// True when the string contains a character from
+/// `SHELL_COMMAND_METACHARACTERS`. The bracketed `[path] ` form types the
+/// path verbatim, and `resolveTargetCLI` falls back to it whenever the
+/// focused session cannot be inspected (every terminal other than
+/// iTerm2/Terminal.app, or no known CLI running), so the text may land on
+/// a plain shell prompt. With Auto-Return on, a foreign file dropped into
+/// the watched folder named `` `cmd`.png `` or `a;cmd;.png` would then be
+/// executed, so such paths are refused rather than typed unescaped.
+public func containsShellCommandMetacharacters(_ s: String) -> Bool {
+    s.contains { SHELL_COMMAND_METACHARACTERS.contains($0) }
+}
+
 public func typedScreenshotText(path: String, targetCLI: TargetCLI) -> String? {
     guard !containsControlCharacters(path) else { return nil }
     switch targetCLI {
     case .plainPath:
         return shellEscapedPath(path) + " "
     case .claude:
+        guard !containsShellCommandMetacharacters(path) else { return nil }
         return "[\(path)] "
     }
 }

@@ -87,10 +87,17 @@ final class TerminalInjector {
     func injectPath(_ path: String, terminalBundleID bid: String) -> Bool {
         let targetCLI = detectTargetCLI(terminalBundleID: bid)
         guard let text = typedScreenshotText(path: path, targetCLI: targetCLI) else {
-            diagnostic("injection.control_chars_refused", .warn, path, nil, nil)
-            showNotification(
-                title: "Hotshot",
-                body: "Refused to inject a file whose name contains control characters")
+            if containsControlCharacters(path) {
+                diagnostic("injection.control_chars_refused", .warn, path, nil, nil)
+                showNotification(
+                    title: "Hotshot",
+                    body: "Refused to inject a file whose name contains control characters")
+            } else {
+                diagnostic("injection.shell_metachars_refused", .warn, path, nil, nil)
+                showNotification(
+                    title: "Hotshot",
+                    body: "Refused to inject a file whose name contains shell metacharacters")
+            }
             return false
         }
         // Load the pasteboard with image + file URL + plain-text path so

@@ -1,6 +1,22 @@
 import AppKit
 import HotshotCore
 
+/// Result of running one AppleScript source through a `ScriptRunner`.
+/// Mirrors the three things `NSAppleScript` can tell us, so tests can drive
+/// every `TerminalInjector` branch without Automation permission.
+public enum ScriptOutcome: Equatable {
+    /// The script compiled and ran; carries the result's `stringValue`.
+    case success(String?)
+    /// The script compiled but `executeAndReturnError` reported an error.
+    case failure(String)
+    /// `NSAppleScript(source:)` could not compile the source.
+    case unavailable
+}
+
+/// Executes AppleScript source. The default runner wraps `NSAppleScript`;
+/// tests substitute a recorder.
+public typealias ScriptRunner = (_ source: String) -> ScriptOutcome
+
 /// Owns AppleScript execution and injection-strategy selection, extracted
 /// from the app delegate. Follows the same seam pattern as `ClipboardWatcher`:
 /// side-effecting AppKit/AppleScript/`ps` calls live here, while the actual
@@ -18,14 +34,23 @@ public final class TerminalInjector {
     private let autoFocus: () -> Bool
     private let notificationsEnabled: () -> Bool
     private let verboseDiagnostics: () -> Bool
+    private let scriptRunner: ScriptRunner
+    private let ttyCommands: ((String) -> [String])?
 
+    /// - Parameters:
+    ///   - scriptRunner: how AppleScript source is executed. Defaults to
+    ///     `NSAppleScript`; tests inject a recorder.
+    ///   - ttyCommands: how the commands attached to a tty are listed.
+    ///     `nil` (the default) shells out to `/bin/ps` via `commands(onTTY:)`.
     public init(
         diagnostic: @escaping Diagnostic,
         loadPasteboard: @escaping (String) -> Void,
         autoReturn: @escaping () -> Bool,
         autoFocus: @escaping () -> Bool,
         notificationsEnabled: @escaping () -> Bool,
-        verboseDiagnostics: @escaping () -> Bool
+        verboseDiagnostics: @escaping () -> Bool,
+        scriptRunner: @escaping ScriptRunner = TerminalInjector.appleScriptRunner,
+        ttyCommands: ((String) -> [String])? = nil
     ) {
         self.diagnostic = diagnostic
         self.loadPasteboard = loadPasteboard
@@ -33,14 +58,23 @@ public final class TerminalInjector {
         self.autoFocus = autoFocus
         self.notificationsEnabled = notificationsEnabled
         self.verboseDiagnostics = verboseDiagnostics
+        self.scriptRunner = scriptRunner
+        self.ttyCommands = ttyCommands
+    }
+
+    /// The production `ScriptRunner`: compiles and executes `source` with
+    /// `NSAppleScript`, mapping its two failure modes onto `ScriptOutcome`.
+    public static func appleScriptRunner(_ source: String) -> ScriptOutcome {
+        guard let script = NSAppleScript(source: source) else { return .unavailable }
+        var error: NSDictionary?
+        let result = script.executeAndReturnError(&error)
+        if let err = error { return .failure("\(err)") }
+        return .success(result.stringValue)
     }
 
     func runAppleScriptForResult(_ source: String) -> String? {
-        var error: NSDictionary?
-        guard let script = NSAppleScript(source: source) else { return nil }
-        let result = script.executeAndReturnError(&error)
-        if error != nil { return nil }
-        return result.stringValue
+        if case .success(let value) = scriptRunner(source) { return value }
+        return nil
     }
 
     /// List the commands of processes attached to a tty (e.g. "ttys003").
@@ -71,7 +105,8 @@ public final class TerminalInjector {
         if ttyPath == nil || ttyPath?.isEmpty == true {
             NSLog("Hotshot: cannot determine tty for \(bid); defaulting to bracketed format")
         }
-        let cli = resolveTargetCLI(ttyPath: ttyPath, commandsForTTY: { self.commands(onTTY: $0) })
+        let lookup: (String) -> [String] = ttyCommands ?? { self.commands(onTTY: $0) }
+        let cli = resolveTargetCLI(ttyPath: ttyPath, commandsForTTY: lookup)
         NSLog("Hotshot: detected CLI=\(String(describing: cli)) for \(bid)")
         return cli
     }
@@ -141,20 +176,19 @@ public final class TerminalInjector {
 
     @discardableResult
     func runAppleScript(_ source: String) -> Bool {
-        var error: NSDictionary?
-        if let script = NSAppleScript(source: source) {
-            let result = script.executeAndReturnError(&error)
-            if let err = error {
-                diagnostic("applescript.error", .error, nil, nil, "\(err)")
-                return false
-            }
+        switch scriptRunner(source) {
+        case .success(let value):
             if verboseDiagnostics() {
-                diagnostic("applescript.result", .info, result.stringValue ?? "(none)", nil, nil)
+                diagnostic("applescript.result", .info, value ?? "(none)", nil, nil)
             }
             return true
+        case .failure(let detail):
+            diagnostic("applescript.error", .error, nil, nil, detail)
+            return false
+        case .unavailable:
+            diagnostic("applescript.unavailable", .error, nil, nil, nil)
+            return false
         }
-        diagnostic("applescript.unavailable", .error, nil, nil, nil)
-        return false
     }
 
     public func showNotification(title: String, body: String) {

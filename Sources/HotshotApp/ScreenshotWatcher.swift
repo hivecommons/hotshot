@@ -2,9 +2,9 @@ import AppKit
 import HotshotCore
 
 /// Owns the screenshot-folder file-system watch, its debounce timer, and the
-/// set of already-seen files, extracted from HotshotApp.
-final class ScreenshotWatcher {
-    typealias Diagnostic = (
+/// set of already-seen files, extracted from the app delegate.
+public final class ScreenshotWatcher {
+    public typealias Diagnostic = (
         _ event: String, _ severity: DiagnosticSeverity, _ path: String?, _ count: Int?
     ) -> Void
 
@@ -16,9 +16,9 @@ final class ScreenshotWatcher {
     private var lastSeen: Set<String> = []
 
     /// Called with the full path of a new, injectable screenshot.
-    var onNewScreenshot: ((_ path: String) -> Void)?
+    public var onNewScreenshot: ((_ path: String) -> Void)?
 
-    init(
+    public init(
         screenshotDirectory: @escaping () -> String,
         verboseDiagnostics: @escaping () -> Bool,
         diagnostic: @escaping Diagnostic
@@ -34,7 +34,7 @@ final class ScreenshotWatcher {
         (screenshotDirectory() as NSString).expandingTildeInPath
     }
 
-    func start() {
+    public func start() {
         stop()
 
         let dir = directory
@@ -67,7 +67,7 @@ final class ScreenshotWatcher {
         diagnostic("watcher.started", .info, dir, nil)
     }
 
-    func stop() {
+    public func stop() {
         debounceTimer?.cancel()
         debounceTimer = nil
         source?.cancel()

@@ -28,22 +28,53 @@ jobs:
           XCT="$(find "$BIN" -name '*.xctest' -maxdepth 1 | head -1)"
           xcrun llvm-cov report "$XCT/Contents/MacOS/$(basename "$XCT" .xctest)" \
             -instr-profile "$PROF" \
-            -ignore-filename-regex 'Tests/' | tee coverage.txt
-      - name: Coverage gate (HotshotCore lines >= 90%)
+            -ignore-filename-regex 'Tests/|\.derived/' | tee coverage.txt
+      - name: Coverage gate (per-module line floors)
         run: |
           BIN="$(swift build --show-bin-path)"
           PROF="$BIN/codecov/default.profdata"
           XCT="$(find "$BIN" -name '*.xctest' -maxdepth 1 | head -1)"
-          PCT="$(xcrun llvm-cov export "$XCT/Contents/MacOS/$(basename "$XCT" .xctest)" \
+          xcrun llvm-cov export "$XCT/Contents/MacOS/$(basename "$XCT" .xctest)" \
             -instr-profile "$PROF" \
-            -ignore-filename-regex 'Tests/' \
-            -summary-only \
-            | python3 -c 'import json,sys; print(round(json.load(sys.stdin)["data"][0]["totals"]["lines"]["percent"], 2))')"
-          echo "HotshotCore line coverage: ${PCT}% (floor 90%)"
-          if ! python3 -c "import sys; sys.exit(0 if float('${PCT}') >= 90 else 1)"; then
-            echo "::error::HotshotCore line coverage ${PCT}% is below the 90% floor"
-            exit 1
-          fi
+            -ignore-filename-regex 'Tests/|\.derived/' \
+            -summary-only > coverage.json
+          python3 - <<'PY'
+          import json, sys
+
+          # module -> line-coverage floor. Add a line here when a new library
+          # target joins the test bundle. HotshotApp starts at a conservative
+          # 60: its first suite (#106) covers the pasteboard/watcher/injector
+          # branches but not the AppleScript and DispatchSource paths, so the
+          # floor is raised once CI prints a measured figure.
+          floors = {"HotshotCore": 90, "HotshotApp": 60}
+
+          data = json.load(open("coverage.json"))["data"][0]
+          totals = {}
+          for f in data["files"]:
+              parts = f["filename"].split("/Sources/", 1)
+              if len(parts) < 2:
+                  continue
+              mod = parts[1].split("/", 1)[0]
+              covered = f["summary"]["lines"]["covered"]
+              count = f["summary"]["lines"]["count"]
+              c, n = totals.get(mod, (0, 0))
+              totals[mod] = (c + covered, n + count)
+
+          failed = False
+          for mod, (c, n) in sorted(totals.items()):
+              pct = round(100.0 * c / n, 2) if n else 0.0
+              floor = floors.get(mod)
+              label = f" floor {floor}%" if floor is not None else " (unfloored)"
+              print(f"{mod}: {pct}% ({c}/{n} lines)" + label)
+              if floor is not None and pct < floor:
+                  print(f"::error::{mod} line coverage {pct}% is below the {floor}% floor")
+                  failed = True
+          for mod in floors:
+              if mod not in totals:
+                  print(f"::error::module {mod} not present in coverage export")
+                  failed = True
+          sys.exit(1 if failed else 0)
+          PY
 
   shellcheck:
     name: ShellCheck (Linux scripts)

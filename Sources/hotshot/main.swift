@@ -1,4 +1,5 @@
 import AppKit
+import HotshotApp
 import HotshotCore
 
 /// Shared body for every injection failure so the manual menu actions and
@@ -8,7 +9,7 @@ let INJECTION_FAILED_NOTIFICATION_BODY =
 
 // MARK: - App Delegate
 
-class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
+class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var statusItem: NSStatusItem!
     var lastTerminalBundleID: String?
     var lastTerminalPID: pid_t?
@@ -466,6 +467,6 @@ class HotshotApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
-let delegate = HotshotApp()
+let delegate = HotshotAppDelegate()
 app.delegate = delegate
 app.run()

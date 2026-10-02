@@ -26,7 +26,8 @@ Run the checks that apply to your change before opening a PR:
 swift test
 bash linux/tests/hotshot-capture.test.sh
 bash linux/tests/install.test.sh
-shellcheck -S warning linux/hotshot-capture.sh linux/install.sh scripts/bundle.sh
+bash scripts/tests/bundle.test.sh
+shellcheck -S warning linux/hotshot-capture.sh linux/install.sh linux/tests/hotshot-capture.test.sh linux/tests/install.test.sh scripts/bundle.sh scripts/tests/bundle.test.sh
 pwsh -NoProfile -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser; Invoke-ScriptAnalyzer -Path windows -Recurse -Severity Error"
 pwsh -NoProfile -Command "Install-Module Pester -Force -Scope CurrentUser; Invoke-Pester -Path windows/tests -CI"
 ```

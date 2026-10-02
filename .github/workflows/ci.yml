@@ -16,6 +16,7 @@ jobs:
   swift-build:
     name: Swift build (macOS)
     runs-on: macos-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Test
@@ -47,6 +48,7 @@ jobs:
   shellcheck:
     name: ShellCheck (Linux scripts)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: shellcheck
@@ -55,6 +57,7 @@ jobs:
   shell-tests:
     name: Linux capture tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run Linux capture tests
@@ -67,12 +70,13 @@ jobs:
   powershell-analyze:
     name: PSScriptAnalyzer (Windows scripts)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: PSScriptAnalyzer
         shell: pwsh
         run: |
-          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Force -Scope CurrentUser
           $r = Invoke-ScriptAnalyzer -Path windows -Recurse -Severity Error
           $r | Format-Table -AutoSize
           if ($r) { exit 1 }
@@ -80,10 +84,11 @@ jobs:
   pester:
     name: Pester (Windows script unit tests)
     runs-on: windows-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run Pester tests
         shell: pwsh
         run: |
-          Install-Module Pester -Force -Scope CurrentUser
+          Install-Module Pester -RequiredVersion 6.2.0 -Force -Scope CurrentUser
           Invoke-Pester -Path windows/tests -CI

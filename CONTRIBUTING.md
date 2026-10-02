@@ -34,7 +34,7 @@ pwsh -NoProfile -Command "Install-Module Pester -Force -Scope CurrentUser; Invok
 Notes:
 
 - The Linux test suites are hermetic and do not need a display server, capture tools, or a real gsettings.
-- `swift test` requires macOS because the executable imports AppKit; it runs the suite in `Tests/HotshotCoreTests`.
+- `swift test` requires macOS because the app targets import AppKit; it runs the suites in `Tests/HotshotCoreTests` (pure decisions) and `Tests/HotshotAppTests` (the pasteboard/watcher/injector shells in `Sources/HotshotApp`).
 - The Pester suite (`windows/tests/hotshot-capture.tests.ps1`) exercises the Windows capture script logic and runs on `windows-latest` in CI; it's independent of the PSScriptAnalyzer lint check above.
 - If you cannot run a platform-specific check locally, say so in the PR and describe the manual validation you did run.
 

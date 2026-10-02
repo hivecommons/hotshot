@@ -1,9 +1,10 @@
 import AppKit
 import HotshotCore
 
-/// Owns clipboard polling state and pasteboard I/O, extracted from HotshotApp.
-final class ClipboardWatcher {
-    typealias Diagnostic = (
+/// Owns clipboard polling state and pasteboard I/O, extracted from the app
+/// delegate so the test bundle can link and cover it.
+public final class ClipboardWatcher {
+    public typealias Diagnostic = (
         _ event: String, _ severity: DiagnosticSeverity, _ path: String?, _ detail: String?
     ) -> Void
 
@@ -14,9 +15,9 @@ final class ClipboardWatcher {
     private var lastChangeCount: Int = 0
 
     /// Called when a new image lands on the clipboard.
-    var onImageDetected: ((_ changeCount: Int) -> Void)?
+    public var onImageDetected: ((_ changeCount: Int) -> Void)?
 
-    init(
+    public init(
         pasteboard: NSPasteboard = .general,
         screenshotDirectory: @escaping () -> String,
         diagnostic: @escaping Diagnostic
@@ -28,7 +29,7 @@ final class ClipboardWatcher {
 
     deinit { timer?.invalidate() }
 
-    func start() {
+    public func start() {
         stop()
         lastChangeCount = pasteboard.changeCount
         timer = Timer.scheduledTimer(
@@ -39,7 +40,7 @@ final class ClipboardWatcher {
         NSLog("Hotshot: started watching clipboard for images")
     }
 
-    func stop() {
+    public func stop() {
         timer?.invalidate()
         timer = nil
         NSLog("Hotshot: stopped watching clipboard")
@@ -54,7 +55,7 @@ final class ClipboardWatcher {
         onImageDetected?(currentCount)
     }
 
-    func hasImage() -> Bool {
+    public func hasImage() -> Bool {
         pasteboard.canReadItem(withDataConformingToTypes: [
             "public.png", "public.tiff", "public.jpeg",
         ])
@@ -96,7 +97,7 @@ final class ClipboardWatcher {
     }
 
     /// Load an on-disk screenshot onto the pasteboard (image + URL + path).
-    func loadPasteboard(withFile path: String) {
+    public func loadPasteboard(withFile path: String) {
         guard let data = FileManager.default.contents(atPath: path) else {
             diagnostic("pasteboard.read_failed", .warn, path, nil)
             return
@@ -119,7 +120,7 @@ final class ClipboardWatcher {
     /// pasteboard with image + file URL + plain-text path representations.
     /// Returns the saved path, or nil if there was no image to save.
     @discardableResult
-    func enrichWithSavedImage() -> String? {
+    public func enrichWithSavedImage() -> String? {
         let dir = (screenshotDirectory() as NSString).expandingTildeInPath
 
         // Already enriched (image + control-character-free hotshot-*.png

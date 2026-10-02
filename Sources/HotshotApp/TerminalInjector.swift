@@ -2,12 +2,12 @@ import AppKit
 import HotshotCore
 
 /// Owns AppleScript execution and injection-strategy selection, extracted
-/// from HotshotApp. Follows the same seam pattern as `ClipboardWatcher`:
+/// from the app delegate. Follows the same seam pattern as `ClipboardWatcher`:
 /// side-effecting AppKit/AppleScript/`ps` calls live here, while the actual
 /// decisions (`injectionTarget`, `resolveTargetCLI`, `typedScreenshotText`)
 /// stay in HotshotCore as pure, unit-tested functions.
-final class TerminalInjector {
-    typealias Diagnostic = (
+public final class TerminalInjector {
+    public typealias Diagnostic = (
         _ event: String, _ severity: DiagnosticSeverity, _ path: String?, _ script: String?,
         _ detail: String?
     ) -> Void
@@ -19,7 +19,7 @@ final class TerminalInjector {
     private let notificationsEnabled: () -> Bool
     private let verboseDiagnostics: () -> Bool
 
-    init(
+    public init(
         diagnostic: @escaping Diagnostic,
         loadPasteboard: @escaping (String) -> Void,
         autoReturn: @escaping () -> Bool,
@@ -77,14 +77,14 @@ final class TerminalInjector {
     }
 
     @discardableResult
-    func sendCtrlV(terminalBundleID bid: String, terminalName: String?) -> Bool {
+    public func sendCtrlV(terminalBundleID bid: String, terminalName: String?) -> Bool {
         let script = ctrlVScript(bundleID: bid)
         NSLog("Hotshot: sending Ctrl-V to \(terminalName ?? bid)")
         return runAppleScript(script)
     }
 
     @discardableResult
-    func injectPath(_ path: String, terminalBundleID bid: String) -> Bool {
+    public func injectPath(_ path: String, terminalBundleID bid: String) -> Bool {
         let targetCLI = detectTargetCLI(terminalBundleID: bid)
         guard let text = typedScreenshotText(path: path, targetCLI: targetCLI) else {
             if containsControlCharacters(path) {
@@ -130,7 +130,7 @@ final class TerminalInjector {
             genericInjectionScript(text: path, bundleID: bundleID, autoReturn: autoReturn()))
     }
 
-    func focusTerminal(bundleID: String) {
+    public func focusTerminal(bundleID: String) {
         let script = """
             tell application id "\(bundleID)"
                 activate
@@ -157,7 +157,7 @@ final class TerminalInjector {
         return false
     }
 
-    func showNotification(title: String, body: String) {
+    public func showNotification(title: String, body: String) {
         guard notificationsEnabled() else { return }
         runAppleScript(notificationScript(title: title, body: body))
     }

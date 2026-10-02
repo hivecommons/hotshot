@@ -42,11 +42,10 @@ jobs:
           import json, sys
 
           # module -> line-coverage floor. Add a line here when a new library
-          # target joins the test bundle. HotshotApp starts at a conservative
-          # 60: its first suite (#106) covers the pasteboard/watcher/injector
-          # branches but not the AppleScript and DispatchSource paths, so the
-          # floor is raised once CI prints a measured figure.
-          floors = {"HotshotCore": 90, "HotshotApp": 60}
+          # target joins the test bundle. Floors sit a few points under the
+          # figure CI last measured on main (HotshotCore 94.5%, HotshotApp
+          # 96.4% at #112); raise them again when a PR lifts coverage.
+          floors = {"HotshotCore": 90, "HotshotApp": 90}
 
           data = json.load(open("coverage.json"))["data"][0]
           totals = {}

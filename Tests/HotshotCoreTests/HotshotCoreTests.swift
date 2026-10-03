@@ -308,6 +308,10 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertTrue(containsShellCommandMetacharacters("/Users/me/Desktop/a;id;.png"))
         XCTAssertTrue(containsShellCommandMetacharacters("/Users/me/Desktop/a&id.png"))
         XCTAssertTrue(containsShellCommandMetacharacters("/Users/me/Desktop/>.zshrc.png"))
+        // History expansion: bash/zsh rewrite `!!` mid-word into the
+        // previous command line (separators included) before parsing.
+        XCTAssertTrue(containsShellCommandMetacharacters("/Users/me/Desktop/!!.png"))
+        XCTAssertTrue(containsShellCommandMetacharacters("/Users/me/Desktop/!-2:gs^a^b^.png"))
     }
 
     func testTypedScreenshotTextRejectsShellMetacharactersInBracketedForm() {
@@ -317,6 +321,7 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertNil(typedScreenshotText(path: "/Users/me/Desktop/`id`.png", targetCLI: .claude))
         XCTAssertNil(typedScreenshotText(path: "/Users/me/Desktop/$(id).png", targetCLI: .claude))
         XCTAssertNil(typedScreenshotText(path: "/Users/me/Desktop/a;id;.png", targetCLI: .claude))
+        XCTAssertNil(typedScreenshotText(path: "/Users/me/Desktop/!!.png", targetCLI: .claude))
         // The plain-path form backslash-escapes them, so it still injects.
         XCTAssertEqual(
             typedScreenshotText(path: "/Users/me/Desktop/a;id.png", targetCLI: .plainPath),
@@ -324,6 +329,9 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertEqual(
             typedScreenshotText(path: "/Users/me/Desktop/`id`.png", targetCLI: .plainPath),
             "/Users/me/Desktop/\\`id\\`.png ")
+        XCTAssertEqual(
+            typedScreenshotText(path: "/Users/me/Desktop/!!.png", targetCLI: .plainPath),
+            "/Users/me/Desktop/\\!\\!.png ")
     }
 
     func testTrustedEnrichedClipboardPathAcceptsExistingEscapedPath() {

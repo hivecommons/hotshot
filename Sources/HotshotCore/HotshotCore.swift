@@ -313,9 +313,11 @@ public func containsControlCharacters(_ s: String) -> Bool {
 
 /// Characters that make a typed word run or redirect when a POSIX shell
 /// reads it: command substitution (`$`, backtick), command separators
-/// (`;`, `|`, `&`) and redirections (`<`, `>`). None of them appear in
-/// macOS's own screenshot names.
-let SHELL_COMMAND_METACHARACTERS: Set<Character> = ["$", "`", ";", "|", "&", "<", ">"]
+/// (`;`, `|`, `&`), redirections (`<`, `>`) and history expansion (`!`,
+/// which bash and zsh rewrite mid-word into the previous command line —
+/// separators included — before parsing). None of them appear in macOS's
+/// own screenshot names.
+let SHELL_COMMAND_METACHARACTERS: Set<Character> = ["$", "`", ";", "|", "&", "<", ">", "!"]
 
 /// True when the string contains a character from
 /// `SHELL_COMMAND_METACHARACTERS`. The bracketed `[path] ` form types the
@@ -324,7 +326,9 @@ let SHELL_COMMAND_METACHARACTERS: Set<Character> = ["$", "`", ";", "|", "&", "<"
 /// iTerm2/Terminal.app, or no known CLI running), so the text may land on
 /// a plain shell prompt. With Auto-Return on, a foreign file dropped into
 /// the watched folder named `` `cmd`.png `` or `a;cmd;.png` would then be
-/// executed, so such paths are refused rather than typed unescaped.
+/// executed, and one named `!!.png` would replay the previous command line
+/// via history expansion, so such paths are refused rather than typed
+/// unescaped.
 public func containsShellCommandMetacharacters(_ s: String) -> Bool {
     s.contains { SHELL_COMMAND_METACHARACTERS.contains($0) }
 }

@@ -2,11 +2,6 @@ import AppKit
 import HotshotApp
 import HotshotCore
 
-/// Shared body for every injection failure so the manual menu actions and
-/// the automatic watchers point at the same Automation-permission fix.
-let INJECTION_FAILED_NOTIFICATION_BODY =
-    "Injection FAILED \u{2014} allow Hotshot to control your terminal: System Settings \u{2192} Privacy & Security \u{2192} Automation"
-
 // MARK: - App Delegate
 
 class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -56,6 +51,32 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
     }()
 
+    /// Injection decisions live in `InjectionCoordinator` (HotshotApp) so
+    /// the test bundle covers them; the delegate only wires collaborators.
+    lazy var injectionCoordinator: InjectionCoordinator = {
+        InjectionCoordinator(
+            target: { [unowned self] in
+                self.lastTerminalBundleID.map {
+                    InjectionCoordinator.Target(bundleID: $0, name: self.lastTerminalName)
+                }
+            },
+            enrichClipboard: { [unowned self] in self.clipboardWatcher.enrichWithSavedImage() },
+            hasClipboardImage: { [unowned self] in self.clipboardWatcher.hasImage() },
+            mostRecentScreenshot: { dir in findMostRecentScreenshot(in: dir) },
+            sendCtrlV: { [unowned self] bid, name in
+                self.terminalInjector.sendCtrlV(terminalBundleID: bid, terminalName: name)
+            },
+            injectPath: { [unowned self] path, bid in
+                self.terminalInjector.injectPath(path, terminalBundleID: bid)
+            },
+            focusTerminal: { [unowned self] bid in self.terminalInjector.focusTerminal(bundleID: bid) },
+            autoFocus: { [unowned self] in self.autoFocus },
+            notify: { [unowned self] body in self.showNotification(title: "Hotshot", body: body) },
+            diagnostic: { [unowned self] event, severity, path in
+                self.diag(event, severity: severity, path: path)
+            })
+    }()
+
     @UserDefault(PREF_AUTO_FOCUS, defaultValue: true)
     var autoFocus: Bool
 
@@ -81,11 +102,9 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     lazy var verboseDiagnostics: Bool = verboseDiagnosticsEnabled()
 
     /// Emit a stable, local-only diagnostic line (see HotshotCore.diagnosticLine).
-    /// `path` and `script` may reveal screenshot directory paths, filenames,
-    /// generated AppleScript, or clipboard text, so both are redacted unless
-    /// HOTSHOT_VERBOSE_LOGGING=1 is set. `count` and `detail` are for
-    /// non-sensitive, bounded information (e.g. a file count or an
-    /// AppleScript error description) that is always safe in normal logs.
+    /// Redaction and ordering of `path`/`script`/`count`/`detail` are decided
+    /// by `diagnosticDetail` (HotshotApp); `path` and `script` stay redacted
+    /// unless HOTSHOT_VERBOSE_LOGGING=1 is set.
     func diag(
         _ event: String,
         severity: DiagnosticSeverity = .info,
@@ -94,20 +113,8 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         count: Int? = nil,
         detail: String? = nil
     ) {
-        var parts: [String] = []
-        if let path {
-            parts.append(redacted(path, verbose: verboseDiagnostics))
-        }
-        if let script {
-            parts.append(redacted(script, verbose: verboseDiagnostics))
-        }
-        if let count {
-            parts.append("\(count) file(s)")
-        }
-        if let detail {
-            parts.append(detail)
-        }
-        let joinedDetail = parts.isEmpty ? nil : parts.joined(separator: ", ")
+        let joinedDetail = diagnosticDetail(
+            path: path, script: script, count: count, detail: detail, verbose: verboseDiagnostics)
         NSLog(diagnosticLine(event: event, severity: severity, detail: joinedDetail))
     }
 
@@ -122,20 +129,19 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Shared by launch-time seeding and the menu-open fallback so both
     /// paths agree on what counts as "a terminal".
     func seedTargetFromRunningApps(logPrefix: String) {
-        if let front = workspace.frontmostApplication,
-            let bid = front.bundleIdentifier,
-            TERMINAL_BUNDLE_IDS.contains(bid)
-        {
-            setTarget(front)
+        guard
+            let seed = InjectionCoordinator.seedCandidate(
+                frontmost: workspace.frontmostApplication,
+                running: workspace.runningApplications,
+                bundleID: { $0.bundleIdentifier },
+                isTerminated: { $0.isTerminated })
+        else { return }
+        setTarget(seed.app)
+        switch seed.source {
+        case .frontmost:
             NSLog("Hotshot: \(logPrefix) seeded target = \(lastTerminalName ?? "unknown")")
-        } else {
-            for app in workspace.runningApplications where !app.isTerminated {
-                if let bid = app.bundleIdentifier, TERMINAL_BUNDLE_IDS.contains(bid) {
-                    setTarget(app)
-                    NSLog("Hotshot: \(logPrefix) found running terminal = \(lastTerminalName ?? "unknown")")
-                    break
-                }
-            }
+        case .running:
+            NSLog("Hotshot: \(logPrefix) found running terminal = \(lastTerminalName ?? "unknown")")
         }
     }
 
@@ -302,26 +308,7 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func injectClipboardNow() {
-        guard let bid = lastTerminalBundleID else {
-            showNotification(title: "Hotshot", body: "No terminal session tracked yet. Focus a terminal first.")
-            return
-        }
-
-        guard clipboardWatcher.hasImage() else {
-            showNotification(title: "Hotshot", body: "No image on clipboard")
-            return
-        }
-
-        NSLog("Hotshot: manually injecting clipboard image via Ctrl-V")
-        guard clipboardWatcher.enrichWithSavedImage() != nil else {
-            NSLog("Hotshot: could not save/enrich clipboard image; refusing to paste untrusted clipboard")
-            showNotification(
-                title: "Hotshot",
-                body: "Could not save the clipboard image \u{2014} paste skipped")
-            return
-        }
-        let injected = terminalInjector.sendCtrlV(terminalBundleID: bid, terminalName: lastTerminalName)
-        completeInjection(injected, successBody: "Clipboard image injected via Ctrl-V", bundleID: bid)
+        injectionCoordinator.injectClipboardNow()
     }
 
     // MARK: - Clipboard Watcher
@@ -331,46 +318,11 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func stopWatchingClipboard() { clipboardWatcher.stop() }
 
     func handleClipboardImage(changeCount: Int) {
-        NSLog("Hotshot: clipboard image detected (changeCount=\(changeCount))")
-
-        // Save to disk and add a plain-text path + file URL alongside the
-        // image so both image-paste (Claude Code) and text-paste (GitHub
-        // Copilot CLI) consumers work. If the image cannot be saved and the
-        // clipboard rewritten, DO NOT paste: Ctrl-V would type whatever
-        // text/plain the clipboard's author put alongside the image.
-        guard clipboardWatcher.enrichWithSavedImage() != nil else {
-            NSLog("Hotshot: could not save/enrich clipboard image; refusing to auto-paste untrusted clipboard")
-            showNotification(
-                title: "Hotshot",
-                body: "Clipboard image could not be saved \u{2014} auto-paste skipped")
-            return
-        }
-
-        guard let bid = lastTerminalBundleID else {
-            NSLog("Hotshot: clipboard image detected but no terminal tracked")
-            showNotification(title: "Hotshot", body: "Clipboard image detected but no terminal session tracked")
-            return
-        }
-
-        let injected = terminalInjector.sendCtrlV(terminalBundleID: bid, terminalName: lastTerminalName)
-        completeInjection(injected, successBody: "Clipboard image injected via Ctrl-V", bundleID: bid)
+        injectionCoordinator.clipboardImageDetected(changeCount: changeCount)
     }
 
     @objc func injectLastScreenshot() {
-        let dir = (screenshotDir as NSString).expandingTildeInPath
-        guard let bid = lastTerminalBundleID else {
-            showNotification(title: "Hotshot", body: "No terminal session tracked yet. Focus a terminal first.")
-            return
-        }
-
-        guard let latest = findMostRecentScreenshot(in: dir) else {
-            showNotification(title: "Hotshot", body: "No screenshot files found in \(dir)")
-            return
-        }
-
-        diag("screenshot.inject_last", path: latest)
-        let injected = terminalInjector.injectPath(latest, terminalBundleID: bid)
-        completeInjection(injected, successBody: "Injected \u{2192} \(latest)", bundleID: bid)
+        injectionCoordinator.injectLastScreenshot(dir: (screenshotDir as NSString).expandingTildeInPath)
     }
 
     // MARK: - Screenshot Folder Watcher
@@ -380,17 +332,7 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func stopWatchingScreenshots() { screenshotWatcher.stop() }
 
     func handleNewScreenshot(_ path: String) {
-        guard let bid = lastTerminalBundleID else {
-            NSLog("Hotshot: new screenshot detected but no terminal tracked")
-            showNotification(title: "Hotshot", body: "Screenshot detected but no terminal session tracked")
-            return
-        }
-
-        let injected = terminalInjector.injectPath(path, terminalBundleID: bid)
-        completeInjection(
-            injected,
-            successBody: "Auto-injected \u{2192} \((path as NSString).lastPathComponent)",
-            bundleID: bid)
+        injectionCoordinator.newScreenshot(path)
     }
 
     @objc func chooseScreenshotDir() {
@@ -446,20 +388,6 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func showNotification(title: String, body: String) {
         terminalInjector.showNotification(title: title, body: body)
-    }
-
-    /// Shared tail of every injection call site: focus the terminal (when
-    /// `autoFocus` is on) and post a notification — `successBody` on
-    /// success, or the shared `INJECTION_FAILED_NOTIFICATION_BODY` on
-    /// failure. Collapses the four near-identical focus/notify blocks that
-    /// used to follow each `terminalInjector.sendCtrlV`/`injectPath` call.
-    func completeInjection(_ injected: Bool, successBody: String, bundleID bid: String) {
-        if autoFocus {
-            terminalInjector.focusTerminal(bundleID: bid)
-        }
-        showNotification(
-            title: "Hotshot",
-            body: injected ? successBody : INJECTION_FAILED_NOTIFICATION_BODY)
     }
 }
 

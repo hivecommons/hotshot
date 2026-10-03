@@ -14,6 +14,7 @@ $installDir = Join-Path $env:LOCALAPPDATA 'Hotshot'
 $startMenu = [Environment]::GetFolderPath('StartMenu')
 $shortcutPath = Join-Path $startMenu 'Programs\hotshot.lnk'
 $scriptSrc = Join-Path $PSScriptRoot 'hotshot-capture.ps1'
+$moduleSrc = Join-Path $PSScriptRoot 'HotshotCapture.psm1'
 
 if ($Uninstall) {
     Remove-Item -Force -ErrorAction SilentlyContinue $shortcutPath
@@ -22,13 +23,15 @@ if ($Uninstall) {
     exit 0
 }
 
-if (-not (Test-Path $scriptSrc)) {
-    Write-Error "install.ps1: hotshot-capture.ps1 not found next to the installer ($scriptSrc)"
-    exit 1
+foreach ($src in @($scriptSrc, $moduleSrc)) {
+    if (-not (Test-Path $src)) {
+        Write-Error "install.ps1: $(Split-Path -Leaf $src) not found next to the installer ($src)"
+        exit 1
+    }
 }
 
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-Copy-Item -Force $scriptSrc $installDir
+Copy-Item -Force $scriptSrc, $moduleSrc $installDir
 $ahkSrc = Join-Path $PSScriptRoot 'hotshot.ahk'
 if (Test-Path $ahkSrc) { Copy-Item -Force $ahkSrc $installDir }
 

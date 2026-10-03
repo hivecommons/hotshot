@@ -11,6 +11,7 @@
 BeforeAll {
     $script:InstallerSrc = Join-Path $PSScriptRoot '..' 'install.ps1'
     $script:CaptureSrc = Join-Path $PSScriptRoot '..' 'hotshot-capture.ps1'
+    $script:ModuleSrc = Join-Path $PSScriptRoot '..' 'HotshotCapture.psm1'
     $script:AhkSrc = Join-Path $PSScriptRoot '..' 'hotshot.ahk'
     $script:StartMenu = [Environment]::GetFolderPath('StartMenu')
     $script:ShortcutPath = Join-Path $script:StartMenu 'Programs\hotshot.lnk'
@@ -45,14 +46,28 @@ Describe 'install.ps1' {
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $script:TempRoot
     }
 
-    It 'copies hotshot-capture.ps1 and hotshot.ahk into LOCALAPPDATA\Hotshot' {
+    It 'copies hotshot-capture.ps1, HotshotCapture.psm1 and hotshot.ahk into LOCALAPPDATA\Hotshot' {
         $result = Invoke-Installer
 
         $result.ExitCode | Should -Be 0
         Join-Path $script:InstallDir 'hotshot-capture.ps1' | Should -Exist
+        Join-Path $script:InstallDir 'HotshotCapture.psm1' | Should -Exist
         Join-Path $script:InstallDir 'hotshot.ahk' | Should -Exist
         (Get-Content (Join-Path $script:InstallDir 'hotshot-capture.ps1') -Raw) |
             Should -Be (Get-Content $script:CaptureSrc -Raw)
+    }
+
+    It 'installs every module that the installed hotshot-capture.ps1 imports' {
+        $result = Invoke-Installer
+        $result.ExitCode | Should -Be 0
+
+        $installed = Join-Path $script:InstallDir 'hotshot-capture.ps1'
+        $imports = Select-String -Path $installed -Pattern "Import-Module \(Join-Path \`$PSScriptRoot '([^']+)'\)" -AllMatches |
+            ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value }
+        $imports | Should -Not -BeNullOrEmpty
+        foreach ($m in $imports) {
+            Join-Path $script:InstallDir $m | Should -Exist
+        }
     }
 
     It 'creates a Start Menu shortcut targeting powershell with the installed script' {
@@ -126,11 +141,26 @@ Describe 'install.ps1' {
         $script:InstallDir | Should -Not -Exist
     }
 
+    It 'fails without touching the Start Menu when HotshotCapture.psm1 is missing' {
+        $stage = Join-Path $script:TempRoot 'stage'
+        New-Item -ItemType Directory -Force -Path $stage | Out-Null
+        Copy-Item $script:InstallerSrc (Join-Path $stage 'install.ps1')
+        Copy-Item $script:CaptureSrc (Join-Path $stage 'hotshot-capture.ps1')
+
+        $result = Invoke-Installer -Installer (Join-Path $stage 'install.ps1')
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'HotshotCapture\.psm1 not found'
+        $script:ShortcutPath | Should -Not -Exist
+        $script:InstallDir | Should -Not -Exist
+    }
+
     It 'installs without hotshot.ahk when it is absent next to the installer' {
         $bareDir = Join-Path $script:TempRoot 'bare'
         New-Item -ItemType Directory -Force -Path $bareDir | Out-Null
         Copy-Item $script:InstallerSrc (Join-Path $bareDir 'install.ps1')
         Copy-Item $script:CaptureSrc (Join-Path $bareDir 'hotshot-capture.ps1')
+        Copy-Item $script:ModuleSrc (Join-Path $bareDir 'HotshotCapture.psm1')
 
         $result = Invoke-Installer -Installer (Join-Path $bareDir 'install.ps1')
 

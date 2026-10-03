@@ -34,7 +34,7 @@ cd hotshot\windows
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
-The installer copies the scripts to `%LOCALAPPDATA%\Hotshot` and creates a
+The installer copies the scripts (including the required `HotshotCapture.psm1` module) to `%LOCALAPPDATA%\Hotshot` and creates a
 Start Menu shortcut with the global hotkey **Ctrl+Alt+H** (shortcut hotkeys
 are limited to Ctrl+Alt/Ctrl+Shift combos — pick another with
 `-Hotkey 'Ctrl+Shift+F12'` etc.). Uninstall with `install.ps1 -Uninstall`.

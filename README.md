@@ -147,7 +147,7 @@ Diagnostics stay local (Console.app / `stderr`, never sent anywhere) and normall
 
 ## Technical details
 
-Single Swift file (~600 lines), compiled to a native macOS binary. Zero dependencies — no frameworks, no packages, no runtime requirements. Just Apple's built-in APIs:
+A small Swift package (`HotshotCore` for pure logic, `HotshotApp` for the watchers and terminal injection, and the `hotshot` executable target), compiled to a native macOS binary. Zero dependencies — no frameworks, no packages, no runtime requirements. Just Apple's built-in APIs:
 
 - `DispatchSource` file system watcher for auto-detecting new screenshots
 - `NSPasteboard` polling for clipboard image detection

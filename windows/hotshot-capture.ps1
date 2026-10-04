@@ -46,35 +46,16 @@ $termPid = [uint32]0
 $seqBefore = [Hotshot.Native]::GetClipboardSequenceNumber()
 Start-Process 'ms-screenclip:'   # Snipping overlay; result lands on the clipboard
 
-$img = $null
-$deadline = (Get-Date).AddSeconds(60)
-while ((Get-Date) -lt $deadline) {
-    Start-Sleep -Milliseconds 250
-    if ([Hotshot.Native]::GetClipboardSequenceNumber() -ne $seqBefore) {
-        if ([System.Windows.Forms.Clipboard]::ContainsImage()) {
-            $img = [System.Windows.Forms.Clipboard]::GetImage()
-            if ($img) { break }
-        }
-    }
-}
+$img = Wait-HotshotClipboardImage -SequenceBefore $seqBefore -Deadline (Get-Date).AddSeconds(60)
 if (-not $img) { Fail 'capture cancelled or timed out (no image appeared on the clipboard)' }
 
 # --- 2. save PNG + multi-format clipboard -------------------------------------
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
-$shotPath = Join-Path $Dir ("hotshot-{0:yyyyMMdd-HHmmss}.png" -f (Get-Date))
+$shotPath = Get-HotshotShotPath -Dir $Dir
 $img.Save($shotPath, [System.Drawing.Imaging.ImageFormat]::Png)
 
-$dataObj = New-Object System.Windows.Forms.DataObject
-$dataObj.SetImage($img)
-$dataObj.SetText($shotPath)
-$files = New-Object System.Collections.Specialized.StringCollection
-[void]$files.Add($shotPath)
-$dataObj.SetFileDropList($files)
-try {
-    [System.Windows.Forms.Clipboard]::SetDataObject($dataObj, $true)
-} catch {
-    Write-Warning "hotshot: could not rewrite the clipboard: $_"
-}
+$dataObj = New-HotshotClipboardDataObject -Image $img -ShotPath $shotPath
+Set-HotshotClipboardDataObject -DataObject $dataObj
 
 # --- 3. CLI detection ----------------------------------------------------------
 $cli = Get-TargetCli $termPid
@@ -82,23 +63,6 @@ $cli = Get-TargetCli $termPid
 $text = Get-HotshotTypedText -ShotPath $shotPath -Cli $cli
 
 # --- 4. typed injection ---------------------------------------------------------
-$verboseLogging = Get-HotshotVerboseLogging
-if (-not $NoType) {
-    if (-not $text) {
-        Write-Warning (Format-HotshotDiagnostic -Severity WARN -Event 'injection.control_chars_refused' `
-                -Detail "path=$(Get-RedactedPath -Path $shotPath -VerboseLogging $verboseLogging)")
-    } elseif ($termHwnd -ne [IntPtr]::Zero) {
-        [void][Hotshot.Native]::SetForegroundWindow($termHwnd)
-        Start-Sleep -Milliseconds 300
-        $escaped = ConvertTo-SendKeysEscaped -Text $text
-        try {
-            [System.Windows.Forms.SendKeys]::SendWait($escaped)
-        } catch {
-            Write-Warning (Format-HotshotDiagnostic -Severity WARN -Event 'injection.sendkeys_failed' -Detail "$_")
-        }
-    } else {
-        Write-Warning (Format-HotshotDiagnostic -Severity WARN -Event 'injection.no_foreground_terminal')
-    }
-}
+Invoke-HotshotInjection -Text $text -TerminalHandle $termHwnd -NoType:$NoType -ShotPath $shotPath
 
 Write-Output $shotPath

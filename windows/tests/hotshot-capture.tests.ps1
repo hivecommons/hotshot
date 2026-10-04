@@ -186,3 +186,196 @@ Describe 'Format-HotshotDiagnostic' {
         Format-HotshotDiagnostic -Severity ERROR -Event 'clipboard.rewrite_failed' | Should -Be 'hotshot [ERROR] clipboard.rewrite_failed'
     }
 }
+
+Describe 'Wait-HotshotClipboardImage' {
+    BeforeEach {
+        $script:Seq = [System.Collections.Generic.Queue[uint32]]::new()
+        $script:Clock = [datetime]'2026-01-01T00:00:00'
+        $script:Deadline = $script:Clock.AddSeconds(60)
+        $script:Calls = [System.Collections.Generic.List[string]]::new()
+        $script:Now = { $script:Clock }
+        $script:Sleep = { $script:Clock = $script:Clock.AddMilliseconds(250); $script:Calls.Add('sleep') }
+        $script:GetSequence = { if ($script:Seq.Count -gt 0) { $script:Seq.Dequeue() } else { [uint32]7 } }
+    }
+
+    It 'returns the image on the first sequence change that carries one' {
+        foreach ($n in 7, 7, 8) { $script:Seq.Enqueue($n) }
+        $result = Wait-HotshotClipboardImage -SequenceBefore 7 -Deadline $script:Deadline `
+            -GetSequence $script:GetSequence -Now $script:Now -Sleep $script:Sleep `
+            -ContainsImage { $true } -GetImage { 'IMG' }
+
+        $result | Should -Be 'IMG'
+        $script:Calls.Count | Should -Be 3
+    }
+
+    It 'ignores a sequence change without an image and keeps waiting' {
+        foreach ($n in 8, 9) { $script:Seq.Enqueue($n) }
+        $script:HasImage = [System.Collections.Generic.Queue[bool]]::new()
+        foreach ($b in $false, $true) { $script:HasImage.Enqueue($b) }
+        $result = Wait-HotshotClipboardImage -SequenceBefore 7 -Deadline $script:Deadline `
+            -GetSequence $script:GetSequence -Now $script:Now -Sleep $script:Sleep `
+            -ContainsImage { $script:HasImage.Dequeue() } -GetImage { 'IMG' }
+
+        $result | Should -Be 'IMG'
+        $script:Calls.Count | Should -Be 2
+    }
+
+    It 'keeps waiting when the clipboard reports an image but GetImage returns nothing' {
+        foreach ($n in 8, 9) { $script:Seq.Enqueue($n) }
+        $script:Images = [System.Collections.Generic.Queue[object]]::new()
+        $script:Images.Enqueue($null); $script:Images.Enqueue('IMG')
+        $result = Wait-HotshotClipboardImage -SequenceBefore 7 -Deadline $script:Deadline `
+            -GetSequence $script:GetSequence -Now $script:Now -Sleep $script:Sleep `
+            -ContainsImage { $true } -GetImage { $script:Images.Dequeue() }
+
+        $result | Should -Be 'IMG'
+    }
+
+    It 'returns $null at the deadline when the capture is cancelled (sequence never changes)' {
+        $result = Wait-HotshotClipboardImage -SequenceBefore 7 -Deadline $script:Deadline `
+            -GetSequence $script:GetSequence -Now $script:Now -Sleep $script:Sleep `
+            -ContainsImage { throw 'must not be called' } -GetImage { throw 'must not be called' }
+
+        $result | Should -BeNullOrEmpty
+        $script:Calls.Count | Should -Be 240
+    }
+
+    It 'returns $null at the deadline when no image ever appears' {
+        $result = Wait-HotshotClipboardImage -SequenceBefore 7 -Deadline $script:Deadline `
+            -GetSequence { [uint32]8 } -Now $script:Now -Sleep $script:Sleep `
+            -ContainsImage { $false } -GetImage { throw 'must not be called' }
+
+        $result | Should -BeNullOrEmpty
+    }
+
+    It 'returns $null immediately when the deadline has already passed' {
+        $result = Wait-HotshotClipboardImage -SequenceBefore 7 -Deadline $script:Clock.AddSeconds(-1) `
+            -GetSequence $script:GetSequence -Now $script:Now -Sleep $script:Sleep `
+            -ContainsImage { $true } -GetImage { 'IMG' }
+
+        $result | Should -BeNullOrEmpty
+        $script:Calls.Count | Should -Be 0
+    }
+}
+
+Describe 'Get-HotshotShotPath' {
+    It 'names the PNG hotshot-yyyyMMdd-HHmmss.png inside the target directory' {
+        $path = Get-HotshotShotPath -Dir (Join-Path 'C:' 'Shots') -Timestamp ([datetime]'2026-03-04T05:06:07')
+        Split-Path $path -Leaf | Should -Be 'hotshot-20260304-050607.png'
+        Split-Path $path -Parent | Should -Be (Join-Path 'C:' 'Shots')
+    }
+}
+
+Describe 'New-HotshotClipboardDataObject' {
+    BeforeAll {
+        Add-Type -AssemblyName System.Windows.Forms
+        Add-Type -AssemblyName System.Drawing
+    }
+
+    It 'carries the image, the plain-text path and a file drop list' {
+        $bmp = [System.Drawing.Bitmap]::new(2, 2)
+        try {
+            $obj = New-HotshotClipboardDataObject -Image $bmp -ShotPath 'C:\Shots\hotshot-1.png'
+
+            $obj | Should -BeOfType System.Windows.Forms.DataObject
+            $obj.ContainsImage() | Should -BeTrue
+            $obj.GetText() | Should -Be 'C:\Shots\hotshot-1.png'
+            $drop = $obj.GetFileDropList()
+            $drop.Count | Should -Be 1
+            $drop[0] | Should -Be 'C:\Shots\hotshot-1.png'
+        } finally {
+            $bmp.Dispose()
+        }
+    }
+}
+
+Describe 'Set-HotshotClipboardDataObject' {
+    It 'hands the data object to the clipboard setter' {
+        $script:Received = $null
+        Set-HotshotClipboardDataObject -DataObject 'DATA' -SetDataObject { param($o) $script:Received = $o } -WarningVariable w -WarningAction SilentlyContinue
+
+        $script:Received | Should -Be 'DATA'
+        $w | Should -BeNullOrEmpty
+    }
+
+    It 'warns instead of failing when the clipboard cannot be rewritten' {
+        { Set-HotshotClipboardDataObject -DataObject 'DATA' -SetDataObject { throw 'clipboard busy' } -WarningVariable w -WarningAction SilentlyContinue
+            $script:Warnings = $w } | Should -Not -Throw
+
+        $script:Warnings.Count | Should -Be 1
+        "$($script:Warnings[0])" | Should -Be 'hotshot: could not rewrite the clipboard: clipboard busy'
+    }
+}
+
+Describe 'Invoke-HotshotInjection' {
+    BeforeEach {
+        $script:Calls = [System.Collections.Generic.List[string]]::new()
+        $script:Fakes = @{
+            SetForeground = { param($h) $script:Calls.Add("foreground:$h") }
+            SendKeys      = { param($k) $script:Calls.Add("send:$k") }
+            Sleep         = { $script:Calls.Add('sleep') }
+        }
+        $script:Hwnd = [IntPtr]42
+        $env:HOTSHOT_VERBOSE_LOGGING = $null
+    }
+
+    AfterEach {
+        $env:HOTSHOT_VERBOSE_LOGGING = $null
+    }
+
+    It 'refocuses the terminal, then types the SendKeys-escaped text' {
+        $fakes = $script:Fakes
+        Invoke-HotshotInjection -Text '[C:\Shots\a+b.png] ' -TerminalHandle $script:Hwnd -ShotPath 'C:\Shots\a+b.png' `
+            @fakes -WarningVariable w -WarningAction SilentlyContinue
+
+        $script:Calls | Should -Be @('foreground:42', 'sleep', 'send:{[}C:\Shots\a{+}b.png{]} ')
+        $w | Should -BeNullOrEmpty
+    }
+
+    It 'sends nothing with -NoType' {
+        $fakes = $script:Fakes
+        Invoke-HotshotInjection -Text '[C:\Shots\a.png] ' -TerminalHandle $script:Hwnd -NoType -ShotPath 'C:\Shots\a.png' `
+            @fakes -WarningVariable w -WarningAction SilentlyContinue
+
+        $script:Calls.Count | Should -Be 0
+        $w | Should -BeNullOrEmpty
+    }
+
+    It 'warns injection.control_chars_refused with a redacted path when the text is empty' {
+        $fakes = $script:Fakes
+        Invoke-HotshotInjection -Text '' -TerminalHandle $script:Hwnd -ShotPath "C:\Shots\a`n.png" `
+            @fakes -WarningVariable w -WarningAction SilentlyContinue
+
+        $script:Calls.Count | Should -Be 0
+        "$w" | Should -Be 'hotshot [WARN] injection.control_chars_refused: path=<redacted>'
+    }
+
+    It 'reveals the path in the control_chars_refused warning when verbose logging is on' {
+        $fakes = $script:Fakes
+        $env:HOTSHOT_VERBOSE_LOGGING = '1'
+        Invoke-HotshotInjection -Text '' -TerminalHandle $script:Hwnd -ShotPath 'C:\Shots\a.png' `
+            @fakes -WarningVariable w -WarningAction SilentlyContinue
+
+        "$w" | Should -Be 'hotshot [WARN] injection.control_chars_refused: path=C:\Shots\a.png'
+    }
+
+    It 'warns injection.no_foreground_terminal when no terminal window was focused' {
+        $fakes = $script:Fakes
+        Invoke-HotshotInjection -Text '[C:\Shots\a.png] ' -TerminalHandle ([IntPtr]::Zero) -ShotPath 'C:\Shots\a.png' `
+            @fakes -WarningVariable w -WarningAction SilentlyContinue
+
+        $script:Calls.Count | Should -Be 0
+        "$w" | Should -Be 'hotshot [WARN] injection.no_foreground_terminal'
+    }
+
+    It 'warns injection.sendkeys_failed instead of failing when SendWait throws' {
+        $fakes = $script:Fakes.Clone()
+        $fakes.SendKeys = { param($k) throw 'access denied' }
+        { Invoke-HotshotInjection -Text '[C:\Shots\a.png] ' -TerminalHandle $script:Hwnd -ShotPath 'C:\Shots\a.png' `
+                @fakes -WarningVariable w -WarningAction SilentlyContinue
+            $script:Warnings = $w } | Should -Not -Throw
+
+        $script:Calls | Should -Be @('foreground:42', 'sleep')
+        "$($script:Warnings)" | Should -Be 'hotshot [WARN] injection.sendkeys_failed: access denied'
+    }
+}

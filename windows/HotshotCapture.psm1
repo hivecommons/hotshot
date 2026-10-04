@@ -1,4 +1,6 @@
-# Pure helper functions for hotshot-capture.ps1.
+# Helper functions for hotshot-capture.ps1. Side-effecting collaborators
+# (clipboard, Win32, SendKeys, sleeps) are scriptblock parameters that default
+# to the real calls so tests can substitute them.
 
 if (-not (Get-Command Get-CimInstance -ErrorAction SilentlyContinue)) {
     function Get-CimInstance {
@@ -103,5 +105,108 @@ function Format-HotshotDiagnostic {
     return "hotshot [$Severity] $Event"
 }
 
+# --- Capture orchestration (issue #129) -------------------------------------
+# The [Hotshot.Native] defaults rely on the Add-Type in hotshot-capture.ps1.
+
+function Wait-HotshotClipboardImage {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [uint32]$SequenceBefore,
+        [Parameter(Mandatory)] [datetime]$Deadline,
+        [scriptblock]$GetSequence = { [Hotshot.Native]::GetClipboardSequenceNumber() },
+        [scriptblock]$ContainsImage = { [System.Windows.Forms.Clipboard]::ContainsImage() },
+        [scriptblock]$GetImage = { [System.Windows.Forms.Clipboard]::GetImage() },
+        [scriptblock]$Sleep = { Start-Sleep -Milliseconds 250 },
+        [scriptblock]$Now = { Get-Date }
+    )
+
+    while ((& $Now) -lt $Deadline) {
+        & $Sleep
+        if ((& $GetSequence) -ne $SequenceBefore) {
+            if (& $ContainsImage) {
+                $img = & $GetImage
+                if ($img) { return $img }
+            }
+        }
+    }
+    return $null
+}
+
+function Get-HotshotShotPath {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string]$Dir,
+        [datetime]$Timestamp = (Get-Date)
+    )
+    return Join-Path $Dir ("hotshot-{0:yyyyMMdd-HHmmss}.png" -f $Timestamp)
+}
+
+function New-HotshotClipboardDataObject {
+    [CmdletBinding()]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '',
+        Justification = 'Builds an in-memory object; no system state changes.')]
+    param(
+        [Parameter(Mandatory)] [object]$Image,
+        [Parameter(Mandatory)] [string]$ShotPath
+    )
+
+    $dataObj = New-Object System.Windows.Forms.DataObject
+    $dataObj.SetImage($Image)
+    $dataObj.SetText($ShotPath)
+    $files = New-Object System.Collections.Specialized.StringCollection
+    [void]$files.Add($ShotPath)
+    $dataObj.SetFileDropList($files)
+    return $dataObj
+}
+
+function Set-HotshotClipboardDataObject {
+    [CmdletBinding()]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '',
+        Justification = 'Interactive clipboard rewrite; failures only warn.')]
+    param(
+        [Parameter(Mandatory)] [object]$DataObject,
+        [scriptblock]$SetDataObject = { param($o) [System.Windows.Forms.Clipboard]::SetDataObject($o, $true) }
+    )
+
+    try {
+        & $SetDataObject $DataObject
+    } catch {
+        Write-Warning "hotshot: could not rewrite the clipboard: $_"
+    }
+}
+
+function Invoke-HotshotInjection {
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()] [string]$Text,
+        [IntPtr]$TerminalHandle = [IntPtr]::Zero,
+        [switch]$NoType,
+        [Parameter(Mandatory)] [string]$ShotPath,
+        [scriptblock]$SetForeground = { param($h) [void][Hotshot.Native]::SetForegroundWindow($h) },
+        [scriptblock]$SendKeys = { param($k) [System.Windows.Forms.SendKeys]::SendWait($k) },
+        [scriptblock]$Sleep = { Start-Sleep -Milliseconds 300 }
+    )
+
+    $verboseLogging = Get-HotshotVerboseLogging
+    if ($NoType) { return }
+    if (-not $Text) {
+        Write-Warning (Format-HotshotDiagnostic -Severity WARN -Event 'injection.control_chars_refused' `
+                -Detail "path=$(Get-RedactedPath -Path $ShotPath -VerboseLogging $verboseLogging)")
+    } elseif ($TerminalHandle -ne [IntPtr]::Zero) {
+        [void](& $SetForeground $TerminalHandle)
+        & $Sleep
+        $escaped = ConvertTo-SendKeysEscaped -Text $Text
+        try {
+            & $SendKeys $escaped
+        } catch {
+            Write-Warning (Format-HotshotDiagnostic -Severity WARN -Event 'injection.sendkeys_failed' -Detail "$_")
+        }
+    } else {
+        Write-Warning (Format-HotshotDiagnostic -Severity WARN -Event 'injection.no_foreground_terminal')
+    }
+}
+
 Export-ModuleMember -Function Get-TargetCli, Get-HotshotTypedText, ConvertTo-SendKeysEscaped, `
-    Get-HotshotVerboseLogging, Get-RedactedPath, Format-HotshotDiagnostic
+    Get-HotshotVerboseLogging, Get-RedactedPath, Format-HotshotDiagnostic, `
+    Wait-HotshotClipboardImage, Get-HotshotShotPath, New-HotshotClipboardDataObject, `
+    Set-HotshotClipboardDataObject, Invoke-HotshotInjection

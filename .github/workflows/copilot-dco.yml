@@ -4,6 +4,11 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+
 jobs:
   copilot-dco:
     uses: hivecommons/infra/.github/workflows/reusable-copilot-dco.yml@1416d68a1fd5bd475b96c8ddfcffc8539bfa6b08  # hivecommons/infra main pinned 2026-09-24

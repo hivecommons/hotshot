@@ -143,4 +143,24 @@ jobs:
               Start-Sleep -Seconds (10 * $attempt)
             }
           } while ($true)
-          Invoke-Pester -Path windows/tests -CI
+          $cfg = New-PesterConfiguration
+          $cfg.Run.Path = 'windows/tests'
+          $cfg.Run.Exit = $true
+          $cfg.TestResult.Enabled = $true
+          $cfg.Output.Verbosity = 'Detailed'
+          # Only in-process code is measurable: install.ps1 runs in a child
+          # pwsh and hotshot-capture.ps1 is never executed by the suite.
+          $cfg.CodeCoverage.Enabled = $true
+          $cfg.CodeCoverage.Path = @('windows/HotshotCapture.psm1')
+          $cfg.CodeCoverage.OutputPath = 'coverage-pester.xml'
+          # Floor sits a few points under the figure CI measures on main;
+          # raise it when a PR lifts coverage (same policy as the Swift floors).
+          $cfg.CodeCoverage.CoveragePercentTarget = 85
+          Invoke-Pester -Configuration $cfg
+      - name: Upload Pester coverage report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pester-coverage
+          path: coverage-pester.xml
+          if-no-files-found: warn

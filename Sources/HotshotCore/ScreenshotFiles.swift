@@ -25,7 +25,13 @@ public func macOSScreenshotLocation() -> String {
         if let path = normalizedMacOSScreenshotLocation(String(data: data, encoding: .utf8)) {
             return path
         }
-    } catch {}
+    } catch {
+        NSLog(
+            diagnosticLine(
+                event: DiagnosticEvent.screenshotLocationLookupFailed.rawValue,
+                severity: .warn,
+                detail: "\(error.localizedDescription); falling back to ~/Desktop"))
+    }
     return NSHomeDirectory() + "/Desktop"
 }
 

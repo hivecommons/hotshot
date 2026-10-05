@@ -37,13 +37,13 @@ public final class ClipboardWatcher {
         ) { [weak self] _ in
             self?.check()
         }
-        NSLog("Hotshot: started watching clipboard for images")
+        NSLog(diagnosticLine(event: DiagnosticEvent.clipboardWatchStarted.rawValue))
     }
 
     public func stop() {
         timer?.invalidate()
         timer = nil
-        NSLog("Hotshot: stopped watching clipboard")
+        NSLog(diagnosticLine(event: DiagnosticEvent.clipboardWatchStopped.rawValue))
     }
 
     func check() {

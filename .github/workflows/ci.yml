@@ -16,7 +16,7 @@ jobs:
   swift-build:
     name: Swift build (macOS)
     runs-on: macos-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Test
@@ -74,6 +74,13 @@ jobs:
                   failed = True
           sys.exit(1 if failed else 0)
           PY
+      - name: Release build + app bundle
+        run: bash scripts/bundle.sh
+      - name: Validate bundle contents
+        run: |
+          test -x Hotshot.app/Contents/MacOS/hotshot
+          test -f Hotshot.app/Contents/Resources/AppIcon.icns
+          plutil -lint Hotshot.app/Contents/Info.plist
 
   shellcheck:
     name: ShellCheck (Linux scripts)

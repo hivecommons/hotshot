@@ -97,6 +97,43 @@ Describe 'Get-TargetCli' {
         Get-TargetCli 100 | Should -Be 'unknown'
     }
 
+    It 'tolerates processes with a null Name and CommandLine' {
+        # Win32_Process reports CommandLine (and sometimes Name) as $null for
+        # protected or elevated processes the caller cannot inspect. The walk
+        # must not throw on those rows and must still classify descendants.
+        Mock Get-CimInstance -ModuleName HotshotCapture {
+            @(
+                [pscustomobject]@{ ProcessId = 100; ParentProcessId = 0; Name = 'WindowsTerminal.exe'; CommandLine = $null }
+                [pscustomobject]@{ ProcessId = 200; ParentProcessId = 100; Name = $null; CommandLine = $null }
+                [pscustomobject]@{ ProcessId = 300; ParentProcessId = 200; Name = 'node.exe'; CommandLine = 'node C:\Tools\aider.cmd' }
+            )
+        }
+
+        Get-TargetCli 100 | Should -Be 'plain'
+    }
+
+    It 'classifies claude by Name when CommandLine is null' {
+        Mock Get-CimInstance -ModuleName HotshotCapture {
+            @(
+                [pscustomobject]@{ ProcessId = 100; ParentProcessId = 0; Name = 'WindowsTerminal.exe'; CommandLine = 'wt.exe' }
+                [pscustomobject]@{ ProcessId = 200; ParentProcessId = 100; Name = 'claude.exe'; CommandLine = $null }
+            )
+        }
+
+        Get-TargetCli 100 | Should -Be 'claude'
+    }
+
+    It 'returns unknown when every walked process has null Name and CommandLine' {
+        Mock Get-CimInstance -ModuleName HotshotCapture {
+            @(
+                [pscustomobject]@{ ProcessId = 100; ParentProcessId = 0; Name = $null; CommandLine = $null }
+                [pscustomobject]@{ ProcessId = 200; ParentProcessId = 100; Name = $null; CommandLine = $null }
+            )
+        }
+
+        Get-TargetCli 100 | Should -Be 'unknown'
+    }
+
     It 'terminates on parent-pid cycles instead of looping forever' {
         # A stale ParentProcessId can point back into the walked tree (PIDs
         # are recycled on Windows); the seen-set must break the loop.

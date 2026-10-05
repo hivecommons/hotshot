@@ -117,7 +117,10 @@ public final class InjectionCoordinator {
     /// A new image landed on the clipboard (`ClipboardWatcher.onImageDetected`).
     @discardableResult
     public func clipboardImageDetected(changeCount: Int) -> Outcome {
-        NSLog("Hotshot: clipboard image detected (changeCount=\(changeCount))")
+        NSLog(
+            diagnosticLine(
+                event: DiagnosticEvent.clipboardImageDetected.rawValue,
+                detail: "changeCount=\(changeCount)"))
 
         // Save to disk and add a plain-text path + file URL alongside the
         // image so both image-paste (Claude Code) and text-paste (GitHub
@@ -125,13 +128,19 @@ public final class InjectionCoordinator {
         // clipboard rewritten, DO NOT paste: Ctrl-V would type whatever
         // text/plain the clipboard's author put alongside the image.
         guard enrichClipboard() != nil else {
-            NSLog("Hotshot: could not save/enrich clipboard image; refusing to auto-paste untrusted clipboard")
+            NSLog(
+                diagnosticLine(
+                    event: DiagnosticEvent.clipboardUntrustedRefused.rawValue, severity: .warn,
+                    detail: "could not save/enrich clipboard image; auto-paste skipped"))
             notify("Clipboard image could not be saved \u{2014} auto-paste skipped")
             return .untrustedClipboard
         }
 
         guard let target = target() else {
-            NSLog("Hotshot: clipboard image detected but no terminal tracked")
+            NSLog(
+                diagnosticLine(
+                    event: DiagnosticEvent.clipboardNoTerminal.rawValue, severity: .warn,
+                    detail: "clipboard image detected but no terminal tracked"))
             notify("Clipboard image detected but no terminal session tracked")
             return .noTarget
         }
@@ -154,9 +163,12 @@ public final class InjectionCoordinator {
             return .noClipboardImage
         }
 
-        NSLog("Hotshot: manually injecting clipboard image via Ctrl-V")
+        NSLog(diagnosticLine(event: DiagnosticEvent.clipboardManualInject.rawValue, detail: "via Ctrl-V"))
         guard enrichClipboard() != nil else {
-            NSLog("Hotshot: could not save/enrich clipboard image; refusing to paste untrusted clipboard")
+            NSLog(
+                diagnosticLine(
+                    event: DiagnosticEvent.clipboardUntrustedRefused.rawValue, severity: .warn,
+                    detail: "could not save/enrich clipboard image; manual paste skipped"))
             notify("Could not save the clipboard image \u{2014} paste skipped")
             return .untrustedClipboard
         }
@@ -188,7 +200,10 @@ public final class InjectionCoordinator {
     @discardableResult
     public func newScreenshot(_ path: String) -> Outcome {
         guard let target = target() else {
-            NSLog("Hotshot: new screenshot detected but no terminal tracked")
+            NSLog(
+                diagnosticLine(
+                    event: DiagnosticEvent.screenshotNoTerminal.rawValue, severity: .warn,
+                    detail: "new screenshot detected but no terminal tracked"))
             notify("Screenshot detected but no terminal session tracked")
             return .noTarget
         }

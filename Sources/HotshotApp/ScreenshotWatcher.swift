@@ -72,7 +72,7 @@ public final class ScreenshotWatcher {
         debounceTimer = nil
         source?.cancel()
         source = nil
-        NSLog("Hotshot: stopped watching for screenshots")
+        NSLog(diagnosticLine(event: DiagnosticEvent.watcherStopped.rawValue))
     }
 
     func handleDirectoryChange() {

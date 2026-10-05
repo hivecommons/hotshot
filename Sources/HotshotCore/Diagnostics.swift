@@ -46,3 +46,52 @@ public func diagnosticLine(
     }
     return "Hotshot [\(severity.rawValue)] \(event): \(detail)"
 }
+
+/// The closed set of stable diagnostic event names. Every `diagnosticLine`
+/// call site uses one of these (directly via `rawValue`, or as the matching
+/// string literal passed to a `diagnostic` seam), so log filters can rely on
+/// a bounded, lowercase dotted vocabulary. Add a case here before emitting a
+/// new event; `DiagnosticEventTests` enforces this.
+public enum DiagnosticEvent: String, CaseIterable {
+    case appLaunched = "app.launched"
+
+    case targetSeeded = "target.seeded"
+    case targetFoundRunning = "target.found_running"
+    case targetChanged = "target.changed"
+
+    case clipboardWatchStarted = "clipboard.watch_started"
+    case clipboardWatchStopped = "clipboard.watch_stopped"
+    case clipboardImageDetected = "clipboard.image_detected"
+    case clipboardManualInject = "clipboard.manual_inject"
+    case clipboardUntrustedRefused = "clipboard.untrusted_refused"
+    case clipboardNoTerminal = "clipboard.no_terminal"
+    case clipboardSaveFailed = "clipboard.save_failed"
+
+    case pasteboardLoaded = "pasteboard.loaded"
+    case pasteboardReadFailed = "pasteboard.read_failed"
+    case pasteboardPNGConversionFailed = "pasteboard.png_conversion_failed"
+
+    case screenshotInjectLast = "screenshot.inject_last"
+    case screenshotNoTerminal = "screenshot.no_terminal"
+    case screenshotLocationLookupFailed = "screenshot.location_lookup_failed"
+
+    case watcherStarted = "watcher.started"
+    case watcherStopped = "watcher.stopped"
+    case watcherOpenFailed = "watcher.open_failed"
+    case watcherDirectoryChange = "watcher.directory_change"
+    case watcherNewFiles = "watcher.new_files"
+    case watcherNewScreenshot = "watcher.new_screenshot"
+
+    case terminalTTYUnknown = "terminal.tty_unknown"
+    case terminalCLIDetected = "terminal.cli_detected"
+
+    case injectionCtrlV = "injection.ctrl_v"
+    case injectionITerm2 = "injection.iterm2"
+    case injectionITerm2Script = "injection.iterm2.script"
+    case injectionControlCharsRefused = "injection.control_chars_refused"
+    case injectionShellMetacharsRefused = "injection.shell_metachars_refused"
+
+    case appleScriptResult = "applescript.result"
+    case appleScriptError = "applescript.error"
+    case appleScriptUnavailable = "applescript.unavailable"
+}

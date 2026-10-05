@@ -143,7 +143,7 @@ Clipboard mode works with remote sessions (tmux, zellij, OpenShell) as long as t
 Not yet — VS Code's terminal isn't a standalone app. For VS Code, try [vscode-terminal-image-paste](https://github.com/cybersader/vscode-terminal-image-paste).
 
 **What does hotshot log, and where does it go?**
-Diagnostics stay local (Console.app / `stderr`, never sent anywhere) and normally omit screenshot directory paths, filenames, generated AppleScript, and clipboard contents — just stable event names and severities, e.g. `Hotshot [WARN] injection.control_chars_refused`. Set `HOTSHOT_VERBOSE_LOGGING=1` before launching hotshot (or the Linux/Windows capture scripts) to include the redacted values for local debugging.
+Diagnostics stay local (Console.app / `stderr`, never sent anywhere) and normally omit screenshot directory paths, filenames, generated AppleScript, clipboard contents, and terminal names/bundle ids — just stable event names (the closed `DiagnosticEvent` set in `Sources/HotshotCore/Diagnostics.swift`) and severities, e.g. `Hotshot [WARN] injection.control_chars_refused`. Set `HOTSHOT_VERBOSE_LOGGING=1` before launching hotshot (or the Linux/Windows capture scripts) to include the redacted values for local debugging.
 
 ## Technical details
 

@@ -103,18 +103,27 @@ public final class TerminalInjector {
     func detectTargetCLI(terminalBundleID bid: String) -> TargetCLI {
         let ttyPath = ttyScript(forBundleID: bid).flatMap(runAppleScriptForResult)
         if ttyPath == nil || ttyPath?.isEmpty == true {
-            NSLog("Hotshot: cannot determine tty for \(bid); defaulting to bracketed format")
+            NSLog(
+                diagnosticLine(
+                    event: DiagnosticEvent.terminalTTYUnknown.rawValue, severity: .warn,
+                    detail: "\(redacted(bid, verbose: verboseDiagnostics())); defaulting to bracketed format"))
         }
         let lookup: (String) -> [String] = ttyCommands ?? { self.commands(onTTY: $0) }
         let cli = resolveTargetCLI(ttyPath: ttyPath, commandsForTTY: lookup)
-        NSLog("Hotshot: detected CLI=\(String(describing: cli)) for \(bid)")
+        NSLog(
+            diagnosticLine(
+                event: DiagnosticEvent.terminalCLIDetected.rawValue,
+                detail: "cli=\(String(describing: cli)), \(redacted(bid, verbose: verboseDiagnostics()))"))
         return cli
     }
 
     @discardableResult
     public func sendCtrlV(terminalBundleID bid: String, terminalName: String?) -> Bool {
         let script = ctrlVScript(bundleID: bid)
-        NSLog("Hotshot: sending Ctrl-V to \(terminalName ?? bid)")
+        NSLog(
+            diagnosticLine(
+                event: DiagnosticEvent.injectionCtrlV.rawValue,
+                detail: redacted(terminalName ?? bid, verbose: verboseDiagnostics())))
         return runAppleScript(script)
     }
 

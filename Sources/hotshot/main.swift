@@ -139,9 +139,13 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setTarget(seed.app)
         switch seed.source {
         case .frontmost:
-            NSLog("Hotshot: \(logPrefix) seeded target = \(lastTerminalName ?? "unknown")")
+            diag(
+                DiagnosticEvent.targetSeeded.rawValue,
+                detail: "\(logPrefix): \(redacted(lastTerminalName ?? "unknown", verbose: verboseDiagnostics))")
         case .running:
-            NSLog("Hotshot: \(logPrefix) found running terminal = \(lastTerminalName ?? "unknown")")
+            diag(
+                DiagnosticEvent.targetFoundRunning.rawValue,
+                detail: "\(logPrefix): \(redacted(lastTerminalName ?? "unknown", verbose: verboseDiagnostics))")
         }
     }
 
@@ -380,7 +384,9 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if TERMINAL_BUNDLE_IDS.contains(bid) {
             setTarget(app)
             updateTargetLabel()
-            NSLog("Hotshot: target changed to \(lastTerminalName ?? "unknown")")
+            diag(
+                DiagnosticEvent.targetChanged.rawValue,
+                detail: redacted(lastTerminalName ?? "unknown", verbose: verboseDiagnostics))
         }
     }
 

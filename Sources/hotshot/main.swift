@@ -6,10 +6,25 @@ import HotshotCore
 
 class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var statusItem: NSStatusItem!
-    var lastTerminalBundleID: String?
-    var lastTerminalPID: pid_t?
-    var lastTerminalName: String?
     var workspace = NSWorkspace.shared
+
+    /// Target-tracking decisions live in `TargetTracker` (HotshotApp) so the
+    /// test bundle covers them; the delegate only wires collaborators.
+    lazy var targetTracker: TargetTracker = {
+        TargetTracker(
+            windowTitle: { [unowned self] pid in self.windowTitle(pid: pid) },
+            isRunning: { [unowned self] pid in
+                self.workspace.runningApplications.contains { $0.processIdentifier == pid }
+            },
+            hasTargetLabel: { [unowned self] in self.targetMenuItem != nil },
+            setTargetLabel: { [unowned self] title in self.targetMenuItem?.title = title },
+            verbose: { [unowned self] in self.verboseDiagnostics },
+            diagnostic: { [unowned self] event, detail in self.diag(event, detail: detail) })
+    }()
+
+    var targetMenuItem: NSMenuItem? {
+        statusItem.menu?.item(withTag: MenuModel.targetItemTag)
+    }
 
     lazy var clipboardWatcher: ClipboardWatcher = {
         let watcher = ClipboardWatcher(
@@ -56,8 +71,8 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     lazy var injectionCoordinator: InjectionCoordinator = {
         InjectionCoordinator(
             target: { [unowned self] in
-                self.lastTerminalBundleID.map {
-                    InjectionCoordinator.Target(bundleID: $0, name: self.lastTerminalName)
+                self.targetTracker.bundleID.map {
+                    InjectionCoordinator.Target(bundleID: $0, name: self.targetTracker.name)
                 }
             },
             enrichClipboard: { [unowned self] in self.clipboardWatcher.enrichWithSavedImage() },
@@ -92,6 +107,12 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @UserDefault(PREF_CLIPBOARD_WATCH, defaultValue: true)
     var clipboardWatch: Bool
 
+    var menuPrefs: MenuPrefs {
+        MenuPrefs(
+            autoFocus: autoFocus, autoReturn: autoReturn, notifications: notifications,
+            autoWatch: autoWatch, clipboardWatch: clipboardWatch)
+    }
+
     var screenshotDir: String {
         get { UserDefaults.standard.string(forKey: PREF_SCREENSHOT_DIR) ?? macOSScreenshotLocation() }
         set { UserDefaults.standard.set(newValue, forKey: PREF_SCREENSHOT_DIR) }
@@ -119,9 +140,8 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func setTarget(_ app: NSRunningApplication) {
-        lastTerminalBundleID = app.bundleIdentifier
-        lastTerminalPID = app.processIdentifier
-        lastTerminalName = windowTitle(for: app) ?? app.localizedName ?? "unknown"
+        targetTracker.setTarget(
+            bundleID: app.bundleIdentifier, pid: app.processIdentifier, localizedName: app.localizedName)
     }
 
     /// Seed the tracked terminal target from the frontmost application, or
@@ -141,16 +161,16 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .frontmost:
             diag(
                 DiagnosticEvent.targetSeeded.rawValue,
-                detail: "\(logPrefix): \(redacted(lastTerminalName ?? "unknown", verbose: verboseDiagnostics))")
+                detail: "\(logPrefix): \(redacted(targetTracker.name ?? "unknown", verbose: verboseDiagnostics))")
         case .running:
             diag(
                 DiagnosticEvent.targetFoundRunning.rawValue,
-                detail: "\(logPrefix): \(redacted(lastTerminalName ?? "unknown", verbose: verboseDiagnostics))")
+                detail: "\(logPrefix): \(redacted(targetTracker.name ?? "unknown", verbose: verboseDiagnostics))")
         }
     }
 
-    func windowTitle(for app: NSRunningApplication) -> String? {
-        let axApp = AXUIElementCreateApplication(app.processIdentifier)
+    func windowTitle(pid: pid_t) -> String? {
+        let axApp = AXUIElementCreateApplication(pid)
         var focusedWindow: AnyObject?
         guard AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &focusedWindow) == .success else {
             return nil
@@ -203,110 +223,72 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func rebuildMenu() {
         let menu = NSMenu()
-
-        let targetItem = NSMenuItem(title: "Target: none", action: nil, keyEquivalent: "")
-        targetItem.tag = 100
-        menu.addItem(targetItem)
-
-        let dirItem = NSMenuItem(title: "Save to: \(screenshotDir)", action: nil, keyEquivalent: "")
-        dirItem.isEnabled = false
-        menu.addItem(dirItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        let focusItem = NSMenuItem(
-            title: "Auto-focus terminal after paste",
-            action: #selector(toggleAutoFocus), keyEquivalent: "")
-        focusItem.state = autoFocus ? .on : .off
-        menu.addItem(focusItem)
-
-        let returnItem = NSMenuItem(
-            title: "Auto-press Return after paste",
-            action: #selector(toggleAutoReturn), keyEquivalent: "")
-        returnItem.state = autoReturn ? .on : .off
-        menu.addItem(returnItem)
-
-        let notifyItem = NSMenuItem(
-            title: "Show notifications",
-            action: #selector(toggleNotifications), keyEquivalent: "")
-        notifyItem.state = notifications ? .on : .off
-        menu.addItem(notifyItem)
-
-        let watchItem = NSMenuItem(
-            title: "Auto-inject new screenshots (⌘⇧3/4)",
-            action: #selector(toggleAutoWatch), keyEquivalent: "")
-        watchItem.state = autoWatch ? .on : .off
-        menu.addItem(watchItem)
-
-        let clipItem = NSMenuItem(
-            title: "Auto-inject from clipboard (⌃⌘⇧3/4)",
-            action: #selector(toggleClipboardWatch), keyEquivalent: "")
-        clipItem.state = clipboardWatch ? .on : .off
-        menu.addItem(clipItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        menu.addItem(
-            withTitle: "Inject last screenshot", action: #selector(injectLastScreenshot),
-            keyEquivalent: "")
-        menu.addItem(
-            withTitle: "Inject clipboard image (Ctrl-V)", action: #selector(injectClipboardNow),
-            keyEquivalent: "")
-
-        menu.addItem(NSMenuItem.separator())
-
-        menu.addItem(
-            withTitle: "Change screenshot folder\u{2026}", action: #selector(chooseScreenshotDir),
-            keyEquivalent: "")
-
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(
-            withTitle: "Quit Hotshot", action: #selector(NSApplication.terminate(_:)),
-            keyEquivalent: "q")
+        for item in MenuModel.items(prefs: menuPrefs, screenshotDir: screenshotDir) {
+            if item.isSeparator {
+                menu.addItem(NSMenuItem.separator())
+                continue
+            }
+            let menuItem = NSMenuItem(
+                title: item.title, action: item.action.map { self.selector(for: $0) },
+                keyEquivalent: item.keyEquivalent)
+            menuItem.tag = item.tag
+            menuItem.isEnabled = item.isEnabled
+            if let isOn = item.isOn {
+                menuItem.state = isOn ? .on : .off
+            }
+            menu.addItem(menuItem)
+        }
 
         menu.delegate = self
         statusItem.menu = menu
         updateTargetLabel()
     }
 
+    func selector(for action: MenuAction) -> Selector {
+        switch action {
+        case .toggleAutoFocus: return #selector(toggleAutoFocus)
+        case .toggleAutoReturn: return #selector(toggleAutoReturn)
+        case .toggleNotifications: return #selector(toggleNotifications)
+        case .toggleAutoWatch: return #selector(toggleAutoWatch)
+        case .toggleClipboardWatch: return #selector(toggleClipboardWatch)
+        case .injectLastScreenshot: return #selector(injectLastScreenshot)
+        case .injectClipboardNow: return #selector(injectClipboardNow)
+        case .chooseScreenshotDir: return #selector(chooseScreenshotDir)
+        case .quit: return #selector(NSApplication.terminate(_:))
+        }
+    }
+
     func menuWillOpen(_ menu: NSMenu) {
-        if lastTerminalBundleID == nil {
-            seedTargetFromRunningApps(logPrefix: "menuWillOpen")
-        }
-        updateTargetLabel()
+        targetTracker.menuWillOpen { self.seedTargetFromRunningApps(logPrefix: "menuWillOpen") }
     }
 
-    @objc func toggleAutoFocus() {
-        autoFocus = !autoFocus
-        rebuildMenu()
-    }
+    @objc func toggleAutoFocus() { applyToggle(.toggleAutoFocus) }
 
-    @objc func toggleAutoReturn() {
-        autoReturn = !autoReturn
-        rebuildMenu()
-    }
+    @objc func toggleAutoReturn() { applyToggle(.toggleAutoReturn) }
 
-    @objc func toggleNotifications() {
-        notifications = !notifications
-        rebuildMenu()
-    }
+    @objc func toggleNotifications() { applyToggle(.toggleNotifications) }
 
-    @objc func toggleAutoWatch() {
-        autoWatch = !autoWatch
-        if autoWatch {
-            startWatchingScreenshots()
-        } else {
-            stopWatchingScreenshots()
-        }
-        rebuildMenu()
-    }
+    @objc func toggleAutoWatch() { applyToggle(.toggleAutoWatch) }
 
-    @objc func toggleClipboardWatch() {
-        clipboardWatch = !clipboardWatch
-        if clipboardWatch {
-            startWatchingClipboard()
-        } else {
-            stopWatchingClipboard()
+    @objc func toggleClipboardWatch() { applyToggle(.toggleClipboardWatch) }
+
+    /// Persist only the pref `MenuModel.toggle` flipped, run its watcher
+    /// command, then rebuild the menu.
+    func applyToggle(_ action: MenuAction) {
+        let current = menuPrefs
+        let result = MenuModel.toggle(action, prefs: current)
+        let next = result.prefs
+        if next.autoFocus != current.autoFocus { autoFocus = next.autoFocus }
+        if next.autoReturn != current.autoReturn { autoReturn = next.autoReturn }
+        if next.notifications != current.notifications { notifications = next.notifications }
+        if next.autoWatch != current.autoWatch { autoWatch = next.autoWatch }
+        if next.clipboardWatch != current.clipboardWatch { clipboardWatch = next.clipboardWatch }
+        switch result.command {
+        case .startScreenshots?: startWatchingScreenshots()
+        case .stopScreenshots?: stopWatchingScreenshots()
+        case .startClipboard?: startWatchingClipboard()
+        case .stopClipboard?: stopWatchingClipboard()
+        case nil: break
         }
         rebuildMenu()
     }
@@ -355,13 +337,7 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func updateTargetLabel() {
-        guard let menuItem = statusItem.menu?.item(withTag: 100) else { return }
-        guard let pid = lastTerminalPID else { return }
-        if let app = workspace.runningApplications.first(where: { $0.processIdentifier == pid }),
-           let title = windowTitle(for: app), !title.isEmpty {
-            lastTerminalName = title
-        }
-        menuItem.title = "Target: \(lastTerminalName ?? "unknown")"
+        targetTracker.refreshTargetLabel()
     }
 
     // MARK: - App Activation Observer
@@ -377,17 +353,10 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func appDidActivate(_ notification: Notification) {
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
-            as? NSRunningApplication,
-            let bid = app.bundleIdentifier
+            as? NSRunningApplication
         else { return }
-
-        if TERMINAL_BUNDLE_IDS.contains(bid) {
-            setTarget(app)
-            updateTargetLabel()
-            diag(
-                DiagnosticEvent.targetChanged.rawValue,
-                detail: redacted(lastTerminalName ?? "unknown", verbose: verboseDiagnostics))
-        }
+        targetTracker.appDidActivate(
+            bundleID: app.bundleIdentifier, pid: app.processIdentifier, localizedName: app.localizedName)
     }
 
     // MARK: - Path Injection

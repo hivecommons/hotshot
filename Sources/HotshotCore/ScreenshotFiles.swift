@@ -74,11 +74,27 @@ public func snapshotScreenshotFiles(in dir: String) -> Set<String> {
 public struct ScreenshotFileCandidate: Equatable {
     public let fileName: String
     public let modifiedAt: Date
+    /// True when the file carries the `com.apple.quarantine` extended
+    /// attribute, i.e. it was written by a browser, Mail, Messages, AirDrop
+    /// or another download path rather than by `screencapture`.
+    public let quarantined: Bool
 
-    public init(fileName: String, modifiedAt: Date) {
+    public init(fileName: String, modifiedAt: Date, quarantined: Bool = false) {
         self.fileName = fileName
         self.modifiedAt = modifiedAt
+        self.quarantined = quarantined
     }
+}
+
+/// Extended attribute macOS sets on files written by browsers, Mail,
+/// Messages, AirDrop and other download paths. Files written by
+/// `screencapture` never carry it, so its presence means "this is not a
+/// screenshot the user just took" and the watcher must not inject it.
+public let QUARANTINE_XATTR = "com.apple.quarantine"
+
+/// True when `path` carries the `com.apple.quarantine` extended attribute.
+public func isQuarantinedFile(atPath path: String) -> Bool {
+    getxattr(path, QUARANTINE_XATTR, nil, 0, 0, XATTR_NOFOLLOW) >= 0
 }
 
 public func newScreenshotFiles(previous: Set<String>, current: Set<String>) -> Set<String> {
@@ -96,17 +112,28 @@ public func isHiddenScreenshotFileName(_ name: String) -> Bool {
 
 /// Build candidates for newly seen files, skipping any whose modification
 /// date cannot be read (e.g. the file vanished between snapshot and lookup).
+/// `isQuarantined` reports whether the file carries the quarantine xattr;
+/// it defaults to "no" so pure callers need not touch the filesystem.
 public func screenshotCandidates(
     for fileNames: Set<String>,
     directory: String,
+    isQuarantined: (String) -> Bool = { _ in false },
     modificationDate: (String) -> Date?
 ) -> [ScreenshotFileCandidate] {
     fileNames.compactMap { file in
         let fullPath = (directory as NSString).appendingPathComponent(file)
-        return modificationDate(fullPath).map { ScreenshotFileCandidate(fileName: file, modifiedAt: $0) }
+        return modificationDate(fullPath).map {
+            ScreenshotFileCandidate(
+                fileName: file, modifiedAt: $0, quarantined: isQuarantined(fullPath))
+        }
     }
 }
 
+/// Newest candidate the watcher may inject, or nil. Skips hotshot's own
+/// saves, hidden in-progress captures, stale files and — because watch
+/// mode types the path into an AI session that will read the image —
+/// quarantined files, which were downloaded or received rather than
+/// captured by the user.
 public func newestInjectableScreenshot(
     from candidates: [ScreenshotFileCandidate],
     directory: String,
@@ -116,6 +143,7 @@ public func newestInjectableScreenshot(
     let newest = candidates
         .filter { !$0.fileName.hasPrefix("hotshot-") }
         .filter { !isHiddenScreenshotFileName($0.fileName) }
+        .filter { !$0.quarantined }
         .filter { now.timeIntervalSince($0.modifiedAt) < maxAge }
         .max { $0.modifiedAt < $1.modifiedAt }
     guard let newest else { return nil }

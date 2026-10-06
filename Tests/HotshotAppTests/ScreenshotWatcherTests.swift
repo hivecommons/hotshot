@@ -67,6 +67,16 @@ final class ScreenshotWatcherTests: XCTestCase {
         return path
     }
 
+    private func setQuarantine(on path: String) throws {
+        let value = Array("0083;00000000;Safari;".utf8)
+        let rc = value.withUnsafeBufferPointer { buf in
+            setxattr(path, QUARANTINE_XATTR, buf.baseAddress, buf.count, 0, 0)
+        }
+        if rc != 0 {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
+    }
+
     // MARK: - checkForNewScreenshots
 
     func testFiresOnceWithTheNewestFreshScreenshot() throws {
@@ -95,6 +105,49 @@ final class ScreenshotWatcherTests: XCTestCase {
 
         XCTAssertEqual(injected, [], "nothing here is an injectable new screenshot")
         XCTAssertNil(events.first { $0.event == "watcher.new_screenshot" })
+        XCTAssertNil(events.first { $0.event == "watcher.quarantined_skipped" })
+    }
+
+    func testRefusesQuarantinedDownloadsAndReportsOnlyACount() throws {
+        let download = try writeFile("cute.png")
+        try setQuarantine(on: download)
+        var injected: [String] = []
+        let watcher = makeWatcher()
+        watcher.onNewScreenshot = { injected.append($0) }
+
+        watcher.checkForNewScreenshots()
+
+        XCTAssertEqual(injected, [], "a downloaded file is not a screenshot the user took")
+        XCTAssertNil(events.first { $0.event == "watcher.new_screenshot" })
+        let skipped = events.filter { $0.event == "watcher.quarantined_skipped" }
+        XCTAssertEqual(skipped.count, 1)
+        XCTAssertEqual(skipped.first?.severity, .warn)
+        XCTAssertEqual(skipped.first?.count, 1)
+        XCTAssertNil(skipped.first?.path, "filenames must stay out of normal diagnostics")
+    }
+
+    func testQuarantinedDownloadDoesNotShadowARealCapture() throws {
+        let shot = try writeFile("Screenshot 2026-10-06 at 09.41.12.png", ageSeconds: 2)
+        let download = try writeFile("cute.png")
+        try setQuarantine(on: download)
+        var injected: [String] = []
+        let watcher = makeWatcher()
+        watcher.onNewScreenshot = { injected.append($0) }
+
+        watcher.checkForNewScreenshots()
+
+        XCTAssertEqual(injected, [shot])
+    }
+
+    func testVerboseDiagnosticsNameTheQuarantinedFiles() throws {
+        verbose = true
+        try setQuarantine(on: try writeFile("b.png"))
+        try setQuarantine(on: try writeFile("a.png"))
+
+        makeWatcher().checkForNewScreenshots()
+
+        let named = events.filter { $0.event == "watcher.quarantined_skipped" && $0.path != nil }
+        XCTAssertEqual(named.first?.path, "a.png, b.png")
     }
 
     func testReportsOnlyACountInNormalDiagnostics() throws {

@@ -218,6 +218,47 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertEqual(screenshotCandidates(for: [], directory: "/d") { _ in date }, [])
     }
 
+    func testScreenshotCandidatesRecordQuarantineState() {
+        let date = Date(timeIntervalSince1970: 500)
+        let candidates = screenshotCandidates(
+            for: ["shot.png", "download.png"], directory: "/d",
+            isQuarantined: { $0 == "/d/download.png" }
+        ) { _ in date }
+        XCTAssertEqual(
+            candidates.sorted { $0.fileName < $1.fileName },
+            [
+                ScreenshotFileCandidate(fileName: "download.png", modifiedAt: date, quarantined: true),
+                ScreenshotFileCandidate(fileName: "shot.png", modifiedAt: date, quarantined: false),
+            ])
+    }
+
+    func testNewestInjectableScreenshotSkipsQuarantinedFiles() {
+        let dir = "/Users/me/Downloads"
+        let now = Date(timeIntervalSince1970: 1_000)
+        let download = ScreenshotFileCandidate(fileName: "cute.png", modifiedAt: now, quarantined: true)
+        let shot = ScreenshotFileCandidate(
+            fileName: "Screenshot 2026-10-06 at 09.41.12.png",
+            modifiedAt: now.addingTimeInterval(-3))
+
+        // A quarantined newest file never wins; the older real capture does.
+        XCTAssertEqual(
+            newestInjectableScreenshot(from: [download, shot], directory: dir, now: now, maxAge: 10),
+            "/Users/me/Downloads/Screenshot 2026-10-06 at 09.41.12.png")
+        // Only quarantined files: nothing is injectable.
+        XCTAssertNil(newestInjectableScreenshot(from: [download], directory: dir, now: now, maxAge: 10))
+    }
+
+    func testIsQuarantinedFileReflectsTheQuarantineXattr() throws {
+        let dir = try makeDirectory()
+        let plain = try writeFile("shot.png", in: dir)
+        let downloaded = try writeFile("download.png", in: dir)
+        try setQuarantine(on: downloaded)
+
+        XCTAssertFalse(isQuarantinedFile(atPath: plain.path))
+        XCTAssertTrue(isQuarantinedFile(atPath: downloaded.path))
+        XCTAssertFalse(isQuarantinedFile(atPath: dir.appendingPathComponent("missing.png").path))
+    }
+
     func testClipboardEnrichmentDecisionReusesTrustedExistingPath() {
         XCTAssertEqual(
             clipboardEnrichmentDecision(
@@ -463,5 +504,17 @@ final class HotshotCoreTests: XCTestCase {
 
     private func setModificationDate(_ date: Date, for url: URL) throws {
         try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: url.path)
+    }
+
+    /// Mark a file the way a browser download is marked (same xattr name,
+    /// representative value) so the quarantine filter can be exercised.
+    private func setQuarantine(on url: URL) throws {
+        let value = Array("0083;00000000;Safari;".utf8)
+        let rc = value.withUnsafeBufferPointer { buf in
+            setxattr(url.path, QUARANTINE_XATTR, buf.baseAddress, buf.count, 0, 0)
+        }
+        if rc != 0 {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
     }
 }

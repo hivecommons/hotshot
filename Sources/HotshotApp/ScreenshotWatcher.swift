@@ -106,9 +106,24 @@ public final class ScreenshotWatcher {
             diagnostic("watcher.new_files", .info, newFiles.sorted().joined(separator: ", "), nil)
         }
 
-        let candidates = screenshotCandidates(for: newFiles, directory: dir) { fullPath in
+        let candidates = screenshotCandidates(
+            for: newFiles, directory: dir, isQuarantined: isQuarantinedFile(atPath:)
+        ) { fullPath in
             let attrs = try? FileManager.default.attributesOfItem(atPath: fullPath)
             return attrs?[.modificationDate] as? Date
+        }
+
+        // Downloaded/received files (browser, Mail, Messages, AirDrop) carry
+        // the quarantine xattr; screen captures never do. They are refused
+        // in `newestInjectableScreenshot`; surface the refusal, count only.
+        let quarantined = candidates.filter(\.quarantined)
+        if !quarantined.isEmpty {
+            diagnostic("watcher.quarantined_skipped", .warn, nil, quarantined.count)
+            if verboseDiagnostics() {
+                diagnostic(
+                    "watcher.quarantined_skipped", .warn,
+                    quarantined.map(\.fileName).sorted().joined(separator: ", "), nil)
+            }
         }
 
         guard let path = newestInjectableScreenshot(from: candidates, directory: dir) else { return }

@@ -118,6 +118,7 @@ chmod +x "$STUBS"/*
 # bundle.sh so the stub is used instead.
 BASHENV="$TMP/bashenv"
 echo 'enable -n kill' >"$BASHENV"
+[ -n "${HOTSHOT_COVERAGE_RC:-}" ] && cat "$HOTSHOT_COVERAGE_RC" >> "$BASHENV"
 
 make_project() { # $1 = dir; builds a minimal project skeleton around bundle.sh
     mkdir -p "$1/scripts" "$1/resources"

@@ -238,7 +238,7 @@ run_e2e() { # $1 = focus pid; remaining args passed to the script
     local focus="$1"
     shift
     rm -f "$TYPELOG" "$CLIPLOG"
-    env -i HOME="$HOME" DISPLAY=:99 PATH="$STUBS:/usr/bin:/bin" \
+    env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" DISPLAY=:99 PATH="$STUBS:/usr/bin:/bin" \
         HOTSHOT_DIR="$TMP/shots" HOTSHOT_TEST_FOCUS_PID="$focus" \
         bash "$SCRIPT" "$@"
 }
@@ -318,7 +318,7 @@ EOF
 chmod +x "$SCROTSTUBS"/*
 root="$(spawn_tree claude)"
 rm -f "$TYPELOG" "$CLIPLOG"
-shot="$(env -i HOME="$HOME" DISPLAY=:99 PATH="$SCROTSTUBS:/usr/bin:/bin" \
+shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" DISPLAY=:99 PATH="$SCROTSTUBS:/usr/bin:/bin" \
     HOTSHOT_DIR="$TMP/shots" HOTSHOT_TEST_FOCUS_PID="$root" \
     bash "$SCRIPT" --full)"
 rc=$?
@@ -371,7 +371,7 @@ run_e2e_wayland() { # $1 = focus pid; remaining args passed to the script
     local focus="$1"
     shift
     rm -f "$TYPELOG" "$CLIPLOG" "$GRIMLOG"
-    env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+    env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
         PATH="$WSTUBS:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
         HOTSHOT_TEST_FOCUS_PID="$focus" \
         bash "$SCRIPT" "$@"
@@ -425,7 +425,7 @@ mv "$WSTUBS/slurp.ok" "$WSTUBS/slurp"
 # No grim on PATH -> die with install hint.
 NOGRIM="$TMP/nogrim"
 mkdir -p "$NOGRIM"
-out="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 PATH="$NOGRIM:/usr/bin:/bin" \
+out="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=wayland-1 PATH="$NOGRIM:/usr/bin:/bin" \
     HOTSHOT_DIR="$TMP/wshots" bash "$SCRIPT" --full 2>&1)"
 rc=$?
 assert_eq "e2e wayland no grim: exit 1" "1" "$rc"
@@ -443,7 +443,7 @@ EOF
 chmod +x "$TMP/ydostubs"/*
 root="$(spawn_tree claude)"
 rm -f "$TYPELOG" "$CLIPLOG" "$GRIMLOG"
-shot="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
     PATH="$TMP/ydostubs:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
     HOTSHOT_TEST_FOCUS_PID="$root" bash "$SCRIPT" --full)"
 rc=$?
@@ -461,7 +461,7 @@ EOF
 chmod +x "$HYPRSTUBS"/*
 root="$(spawn_tree copilot)"
 rm -f "$TYPELOG" "$CLIPLOG" "$GRIMLOG"
-shot="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 HYPRLAND_INSTANCE_SIGNATURE=test \
+shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=wayland-1 HYPRLAND_INSTANCE_SIGNATURE=test \
     PATH="$HYPRSTUBS:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
     HOTSHOT_TEST_FOCUS_PID="$root" bash "$SCRIPT" --full)"
 rc=$?
@@ -480,7 +480,7 @@ run_e2e_stubs() { # $1 = stub dir, $2 = focus pid; remaining args passed on
     local stubs="$1" focus="$2"
     shift 2
     rm -f "$TYPELOG" "$CLIPLOG" "$COPYQLOG"
-    env -i HOME="$HOME" DISPLAY=:99 PATH="$stubs:/usr/bin:/bin" \
+    env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" DISPLAY=:99 PATH="$stubs:/usr/bin:/bin" \
         HOTSHOT_DIR="$TMP/shots" HOTSHOT_TEST_FOCUS_PID="$focus" \
         bash "$SCRIPT" "$@"
 }
@@ -580,7 +580,7 @@ ok=1; [ ! -e "$TYPELOG" ] && ok=0
 check "e2e no xdotool: nothing typed" "$ok"
 
 # Same as above, but HOTSHOT_VERBOSE_LOGGING=1 opts back into the raw path.
-shot_v="$(env -i HOME="$HOME" DISPLAY=:99 PATH="$NOXDO:/usr/bin:/bin" \
+shot_v="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" DISPLAY=:99 PATH="$NOXDO:/usr/bin:/bin" \
     HOTSHOT_DIR="$TMP/vshots" HOTSHOT_TEST_FOCUS_PID="$plain_root" \
     HOTSHOT_VERBOSE_LOGGING=1 bash "$SCRIPT" --full 2>"$TMP/noxdo-verbose.err")"
 grep -q -- "$shot_v" "$TMP/noxdo-verbose.err"
@@ -613,7 +613,7 @@ NOWLCOPY="$TMP/nowlcopy"
 mkdir -p "$NOWLCOPY"
 cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wtype" "$WSTUBS/swaymsg" "$NOWLCOPY/"
 rm -f "$TYPELOG" "$CLIPLOG"
-shot="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
     PATH="$NOWLCOPY:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
     HOTSHOT_TEST_FOCUS_PID="$plain_root" \
     bash "$SCRIPT" --full 2>"$TMP/nowlcopy.err")"
@@ -629,7 +629,7 @@ NOTYPER="$TMP/notyper"
 mkdir -p "$NOTYPER"
 cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wl-copy" "$WSTUBS/swaymsg" "$NOTYPER/"
 rm -f "$TYPELOG" "$CLIPLOG"
-shot="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
     PATH="$NOTYPER:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
     HOTSHOT_TEST_FOCUS_PID="$plain_root" \
     bash "$SCRIPT" --full 2>"$TMP/notyper.err")"
@@ -646,7 +646,7 @@ ok=1; [ ! -e "$TYPELOG" ] && ok=0
 check "e2e wayland no typing tool: nothing typed" "$ok"
 
 # Same as above, but HOTSHOT_VERBOSE_LOGGING=1 opts back into the raw path.
-shot_v="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+shot_v="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
     PATH="$NOTYPER:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wvshots" \
     HOTSHOT_TEST_FOCUS_PID="$plain_root" HOTSHOT_VERBOSE_LOGGING=1 \
     bash "$SCRIPT" --full 2>"$TMP/notyper-verbose.err")"
@@ -660,7 +660,7 @@ cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wl-copy" "$WSTUBS/swaymsg" "$FAILWTYP
 printf '#!/usr/bin/env bash\nexit 1\n' >"$FAILWTYPE/wtype"
 chmod +x "$FAILWTYPE/wtype"
 rm -f "$TYPELOG" "$CLIPLOG"
-shot="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
     PATH="$FAILWTYPE:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
     HOTSHOT_TEST_FOCUS_PID="$plain_root" \
     bash "$SCRIPT" --full 2>"$TMP/failwtype.err")"
@@ -673,7 +673,7 @@ check "e2e wayland wtype failure: screenshot still created" "$ok"
 
 # Screenshot directory cannot be created -> die before any capture.
 : >"$TMP/notadir"
-out="$(env -i HOME="$HOME" DISPLAY=:99 PATH="$STUBS:/usr/bin:/bin" \
+out="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" DISPLAY=:99 PATH="$STUBS:/usr/bin:/bin" \
     HOTSHOT_DIR="$TMP/notadir/sub" HOTSHOT_TEST_FOCUS_PID="$plain_root" \
     bash "$SCRIPT" --full 2>&1)"
 rc=$?
@@ -770,7 +770,7 @@ NOCAPTURE="$TMP/nocapture"
 mkdir -p "$NOCAPTURE"
 cp "$STUBS/xclip" "$STUBS/xdotool" "$NOCAPTURE/"
 rm -rf "$TMP/nocapshots"
-out="$(env -i HOME="$HOME" DISPLAY=:99 PATH="$NOCAPTURE:/usr/bin:/bin" \
+out="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" DISPLAY=:99 PATH="$NOCAPTURE:/usr/bin:/bin" \
     HOTSHOT_DIR="$TMP/nocapshots" HOTSHOT_TEST_FOCUS_PID="$plain_root" \
     bash "$SCRIPT" 2>&1)"
 rc=$?
@@ -817,7 +817,7 @@ cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wtype" "$WSTUBS/swaymsg" "$FAILWLCOPY
 printf '#!/usr/bin/env bash\ncat >/dev/null\nexit 1\n' >"$FAILWLCOPY/wl-copy"
 chmod +x "$FAILWLCOPY/wl-copy"
 rm -f "$TYPELOG" "$CLIPLOG"
-shot="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
     PATH="$FAILWLCOPY:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
     HOTSHOT_TEST_FOCUS_PID="$plain_root" \
     bash "$SCRIPT" --full 2>"$TMP/failwlcopy.err")"
@@ -834,7 +834,7 @@ cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wl-copy" "$WSTUBS/swaymsg" "$FAILYDO/
 printf '#!/usr/bin/env bash\nexit 1\n' >"$FAILYDO/ydotool"
 chmod +x "$FAILYDO/ydotool"
 rm -f "$TYPELOG" "$CLIPLOG"
-shot="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
     PATH="$FAILYDO:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
     HOTSHOT_TEST_FOCUS_PID="$plain_root" \
     bash "$SCRIPT" --full 2>"$TMP/failydo.err")"
@@ -855,7 +855,7 @@ cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wl-copy" "$WSTUBS/wtype" "$NULLFOCUS/
 printf '#!/usr/bin/env bash\necho "{\"nodes\":[]}"\n' >"$NULLFOCUS/swaymsg"
 chmod +x "$NULLFOCUS/swaymsg"
 rm -f "$TYPELOG" "$CLIPLOG"
-shot="$(env -i HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
     PATH="$NULLFOCUS:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
     bash "$SCRIPT" --full 2>"$TMP/nullfocus.err")"
 rc=$?

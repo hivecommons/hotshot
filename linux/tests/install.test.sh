@@ -55,7 +55,7 @@ mkdir -p "$FAKEHOME"
 BASEPATH="/usr/bin:/bin"
 
 run_installer() { # all args passed through; env can be prepended by callers
-    env -i HOME="$FAKEHOME" PATH="$BASEPATH" bash "$INSTALLER" "$@"
+    env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$BASEPATH" bash "$INSTALLER" "$@"
 }
 
 # ==============================================================================
@@ -89,7 +89,7 @@ assert_contains "install: reports the destination" "Installed: $PREFIX/hotshot-c
 assert_contains "install: warns when prefix not on PATH" "is not on your PATH" "$out"
 
 # Prefix already on PATH -> no warning.
-out="$(env -i HOME="$FAKEHOME" PATH="$PREFIX:$BASEPATH" bash "$INSTALLER" --prefix "$PREFIX" 2>&1)"
+out="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$PREFIX:$BASEPATH" bash "$INSTALLER" --prefix "$PREFIX" 2>&1)"
 case "$out" in
     *"is not on your PATH"*) check "install: no PATH warning when prefix is on PATH" 1 ;;
     *) check "install: no PATH warning when prefix is on PATH" 0 ;;
@@ -111,7 +111,7 @@ assert_contains "dep report: X11 lists maim" "maim" "$out"
 assert_contains "dep report: X11 apt hint when no capture tool" "sudo apt install maim xclip xdotool" "$out"
 
 # Wayland via WAYLAND_DISPLAY: reports grim/slurp/wl-copy/wtype.
-out="$(env -i HOME="$FAKEHOME" PATH="$BASEPATH" WAYLAND_DISPLAY=wayland-1 \
+out="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$BASEPATH" WAYLAND_DISPLAY=wayland-1 \
     bash "$INSTALLER" --prefix "$PREFIX" 2>&1)"
 assert_contains "dep report: Wayland session via WAYLAND_DISPLAY" "Session: Wayland" "$out"
 assert_contains "dep report: Wayland lists grim" "grim" "$out"
@@ -119,7 +119,7 @@ assert_contains "dep report: Wayland apt hint when grim missing" "sudo apt insta
 assert_contains "dep report: Wayland typed-injection hint" "install 'wtype' (wlroots) or 'ydotool'" "$out"
 
 # Wayland via XDG_SESSION_TYPE only.
-out="$(env -i HOME="$FAKEHOME" PATH="$BASEPATH" XDG_SESSION_TYPE=wayland \
+out="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$BASEPATH" XDG_SESSION_TYPE=wayland \
     bash "$INSTALLER" --prefix "$PREFIX" 2>&1)"
 assert_contains "dep report: Wayland session via XDG_SESSION_TYPE" "Session: Wayland" "$out"
 
@@ -130,7 +130,7 @@ for t in grim slurp wl-copy wtype copyq jq; do
     printf '#!/usr/bin/env bash\nexit 0\n' >"$STUBS/$t"
     chmod +x "$STUBS/$t"
 done
-out="$(env -i HOME="$FAKEHOME" PATH="$STUBS:$BASEPATH" WAYLAND_DISPLAY=wayland-1 \
+out="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$STUBS:$BASEPATH" WAYLAND_DISPLAY=wayland-1 \
     bash "$INSTALLER" --prefix "$PREFIX" 2>&1)"
 assert_contains "dep report: grim present marked ok" "[ok]      grim" "$out"
 assert_contains "dep report: copyq present marked ok" "[ok]      copyq" "$out"
@@ -150,7 +150,7 @@ mkdir -p "$MINBIN"
 for t in bash dirname mkdir install awk cat cmp grep; do
     ln -sf "$(command -v "$t")" "$MINBIN/$t"
 done
-out="$(env -i HOME="$FAKEHOME" PATH="$MINBIN" bash "$INSTALLER" --prefix "$PREFIX" 2>&1)"
+out="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$MINBIN" bash "$INSTALLER" --prefix "$PREFIX" 2>&1)"
 assert_contains "dep report: copyq optional hint when absent" "[optional] copyq" "$out"
 assert_contains "dep report: jq optional hint when absent" "[optional] jq" "$out"
 
@@ -180,7 +180,7 @@ KEYPATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/hotsho
 
 run_hotkey() { # $1 = existing keybindings value returned by gsettings get
     rm -f "$GSLOG"
-    env -i HOME="$FAKEHOME" PATH="$STUBS:$BASEPATH" GSETTINGS_EXISTING="$1" \
+    env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$STUBS:$BASEPATH" GSETTINGS_EXISTING="$1" \
         bash "$INSTALLER" --prefix "$PREFIX" --gnome-hotkey
 }
 
@@ -214,7 +214,7 @@ grep -qF "binding <Ctrl><Shift>Print" "$GSLOG"
 check "gnome hotkey (already registered): binding still refreshed" $?
 
 # gsettings missing -> exit 1 with a clear message.
-out="$(env -i HOME="$FAKEHOME" PATH="$MINBIN" \
+out="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$MINBIN" \
     bash "$INSTALLER" --prefix "$PREFIX" --gnome-hotkey 2>&1)"
 rc=$?
 assert_eq "gnome hotkey without gsettings: exit 1" "1" "$rc"

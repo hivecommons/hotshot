@@ -42,7 +42,10 @@ grep -o '+COV [^ ]*:[0-9]*:' "$TRACE" \
     | sed -e 's/^+COV //' -e 's/:$//' -e 's|.*/||' \
     | sort -u >"$WORK/hits"
 
-# Prints the executable line numbers of $1, one per line.
+# Prints the executable line numbers of $1, one per line. Skips what xtrace
+# never reports: blanks, comments, bare block keywords, `done` with a loop
+# redirect, function-definition lines, and case pattern lines (including
+# patterns that quote parentheses) — none of these can ever be "covered".
 executable_lines() {
     awk '
         heredoc != "" {
@@ -53,7 +56,9 @@ executable_lines() {
         /^[[:space:]]*$/ { next }
         /^[[:space:]]*#/ { next }
         /^[[:space:]]*(fi|done|esac|else|then|\}|\{|;;)[[:space:]]*$/ { next }
-        /^[[:space:]]*[^[:space:]()]+[^()]*\)[[:space:]]*$/ && !/\(/ && in_case { next }
+        /^[[:space:]]*done[[:space:]]*<.*$/ { next }
+        /^[[:space:]]*(function[[:space:]]+)?[A-Za-z_][A-Za-z_0-9]*[[:space:]]*\(\)[[:space:]]*(\{[[:space:]]*(#.*)?)?$/ { next }
+        in_case && /\)[[:space:]]*$/ && !/\$\(/ && !/=\(/ && !/<\(/ && !/^[[:space:]]*\(/ { next }
         /^[[:space:]]*case[[:space:]]/ { in_case = 1 }
         {
             print NR

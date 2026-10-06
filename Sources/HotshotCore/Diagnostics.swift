@@ -81,6 +81,7 @@ public enum DiagnosticEvent: String, CaseIterable {
     case watcherDirectoryChange = "watcher.directory_change"
     case watcherNewFiles = "watcher.new_files"
     case watcherNewScreenshot = "watcher.new_screenshot"
+    case watcherQuarantinedSkipped = "watcher.quarantined_skipped"
 
     case terminalTTYUnknown = "terminal.tty_unknown"
     case terminalCLIDetected = "terminal.cli_detected"

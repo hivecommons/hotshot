@@ -133,6 +133,9 @@ Make sure hotshot is running (look for the camera icon in your menu bar). Also m
 **Where do the screenshots go?**
 By default, wherever your Mac saves screenshots (usually Desktop or Downloads). hotshot reads your macOS screenshot location setting automatically. You can override it from the menu bar > "Change screenshot folder..."
 
+**I downloaded an image into my screenshot folder and it was not injected.**
+That's on purpose. Watch mode only injects screenshots you took: files written by a browser, Mail, Messages or AirDrop carry macOS's quarantine attribute (`com.apple.quarantine`), which screen captures never do, so hotshot skips them rather than typing an image you didn't capture into your AI session. Use "Inject last screenshot" from the menu, or paste the path yourself, if you really want it.
+
 **What format is the path injected in?**
 hotshot inspects the processes on the target terminal session's tty (iTerm2 and Terminal.app) and picks the format that CLI understands: Claude Code gets `[/path/to/screenshot.png]`, while GitHub Copilot CLI, aider, and OpenCode get a bare backslash-escaped path (what Finder drag-and-drop inserts). If the CLI can't be determined, the historical bracketed format is used. The clipboard simultaneously carries the PNG image, a file URL, and the escaped plain-text path, so pasting (⌘V, or Ctrl-V in Claude Code) works everywhere.
 

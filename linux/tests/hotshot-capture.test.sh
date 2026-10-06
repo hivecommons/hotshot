@@ -182,23 +182,23 @@ check "descendants: walks children (>=2 pids)" $?
 # ==============================================================================
 # argument parsing (runs before session detection — no display needed)
 # ==============================================================================
-out="$(bash "$SCRIPT" --bogus 2>&1)"
+out="$(BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" bash "$SCRIPT" --bogus 2>&1)"
 rc=$?
 assert_eq "unknown option: exit code 2" "2" "$rc"
 case "$out" in *"unknown option '--bogus'"*) check "unknown option: message names the flag" 0 ;; *) check "unknown option: message names the flag" 1 ;; esac
 
-out="$(bash "$SCRIPT" --help 2>&1)"
+out="$(BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" bash "$SCRIPT" --help 2>&1)"
 rc=$?
 assert_eq "--help: exit code 0" "0" "$rc"
 case "$out" in *"Usage: hotshot-capture.sh"*) check "--help: prints usage line" 0 ;; *) check "--help: prints usage line" 1 ;; esac
 
-bash "$SCRIPT" --dir 2>/dev/null
+BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" bash "$SCRIPT" --dir 2>/dev/null
 rc=$?
 [ "$rc" -ne 0 ]
 check "--dir without argument: non-zero exit" $?
 
 # no session at all -> die with the expected message
-out="$(env -u WAYLAND_DISPLAY -u DISPLAY -u XDG_SESSION_TYPE PATH="$PATH" bash "$SCRIPT" 2>&1)"
+out="$(env -u WAYLAND_DISPLAY -u DISPLAY -u XDG_SESSION_TYPE BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" PATH="$PATH" bash "$SCRIPT" 2>&1)"
 rc=$?
 assert_eq "no graphical session: exit 1" "1" "$rc"
 case "$out" in *"no graphical session detected"*) check "no graphical session: message" 0 ;; *) check "no graphical session: message" 1 ;; esac

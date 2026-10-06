@@ -89,7 +89,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: shellcheck
-        run: shellcheck -S warning linux/hotshot-capture.sh linux/install.sh linux/tests/hotshot-capture.test.sh linux/tests/install.test.sh scripts/bundle.sh scripts/tests/bundle.test.sh
+        run: shellcheck -S warning linux/hotshot-capture.sh linux/install.sh linux/tests/hotshot-capture.test.sh linux/tests/install.test.sh scripts/bundle.sh scripts/tests/bundle.test.sh scripts/shell-coverage.sh
 
   shell-tests:
     name: Linux capture tests
@@ -97,12 +97,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Run Linux capture tests
-        run: bash linux/tests/hotshot-capture.test.sh
-      - name: Run Linux installer tests
-        run: bash linux/tests/install.test.sh
-      - name: Run bundle script tests
-        run: bash scripts/tests/bundle.test.sh
+      - name: Run shell suites with line coverage
+        run: bash scripts/shell-coverage.sh
 
   powershell-analyze:
     name: PSScriptAnalyzer (Windows scripts)

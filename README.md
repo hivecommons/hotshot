@@ -68,6 +68,17 @@ A small camera icon appears in your menu bar — that's hotshot running. It stay
 
 > Tip: Run `hotshot &` to background it so it doesn't hold your terminal.
 
+### Build as an app bundle (optional)
+
+To get a double-clickable `Hotshot.app` (menu-bar only, no Dock icon) instead of a bare binary, run the bundle script from the repository root on macOS:
+
+```bash
+scripts/bundle.sh            # builds a release binary and creates ./Hotshot.app
+scripts/bundle.sh --install  # also stops any running hotshot, copies the app to /Applications and launches it
+```
+
+The script runs `swift build -c release`, so the same requirements as above apply.
+
 ### First-time setup
 
 macOS will ask for Accessibility permission the first time — this lets hotshot type the path into your terminal. Grant it in System Settings > Privacy & Security. You only have to do this once.

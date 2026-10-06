@@ -43,9 +43,9 @@ jobs:
 
           # module -> line-coverage floor. Add a line here when a new library
           # target joins the test bundle. Floors sit a few points under the
-          # figure CI last measured on main (HotshotCore 94.5%, HotshotApp
-          # 96.4% at #112); raise them again when a PR lifts coverage.
-          floors = {"HotshotCore": 90, "HotshotApp": 90}
+          # figure CI last measured on main (HotshotCore 98.1%, HotshotApp
+          # 96.9% at #142); raise them again when a PR lifts coverage.
+          floors = {"HotshotCore": 95, "HotshotApp": 94}
 
           data = json.load(open("coverage.json"))["data"][0]
           totals = {}
@@ -162,7 +162,7 @@ jobs:
           $cfg.CodeCoverage.OutputPath = 'coverage-pester.xml'
           # Floor sits a few points under the figure CI measures on main;
           # raise it when a PR lifts coverage (same policy as the Swift floors).
-          $cfg.CodeCoverage.CoveragePercentTarget = 85
+          $cfg.CodeCoverage.CoveragePercentTarget = 88
           Invoke-Pester -Configuration $cfg
       - name: Upload Pester coverage report
         if: always()

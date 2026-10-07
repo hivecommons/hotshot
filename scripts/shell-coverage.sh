@@ -31,16 +31,41 @@ set -x
 RCEOF
 export HOTSHOT_COVERAGE_RC="$RC"
 
+# Reads trace lines on stdin and prints unique "<basename>:<line>" pairs.
+# bundle.test.sh runs a copy of bundle.sh from a temp project, so match on
+# basename (line numbers are unchanged). The path class excludes ':' so the
+# match cannot swallow the command text: a traced no-op `:` yields
+# "+COV f.sh:38::", which a greedy "[^ ]*" turns into the hit "f.sh:38:".
+# xtrace repeats the leading '+' once per nesting level (function bodies,
+# subshells), so any run of them is accepted.
+extract_hits() {
+    sed -nE 's/^\++COV ([^ :]*):([0-9]+):.*/\1:\2/p' \
+        | sed -e 's|.*/||' \
+        | sort -u
+}
+
+# Guard the extraction itself: a bug here reports the wrong lines as
+# uncovered without failing any suite.
+got="$(printf '%s\n' \
+    '+COV /r/linux/install.sh:38::' \
+    '+COV /r/linux/install.sh:39:echo NOTE: not on PATH' \
+    '++COV /r/linux/hotshot-capture.sh:160:local queue' \
+    '+COV /r/scripts/bundle.sh:12:x=a:1:' \
+    '+COV /r/scripts/bundle.sh:12:x=a:1:' \
+    'not a trace line' \
+    | extract_hits | tr '\n' ' ')"
+want='bundle.sh:12 hotshot-capture.sh:160 install.sh:38 install.sh:39 '
+if [ "$got" != "$want" ]; then
+    echo "FAIL shell-coverage self-test: extract_hits gave '$got', want '$want'" >&2
+    exit 1
+fi
+
 for suite in linux/tests/hotshot-capture.test.sh linux/tests/install.test.sh scripts/tests/bundle.test.sh; do
     echo "== $suite"
     bash "$ROOT/$suite"
 done
 
-# Unique "<basename>:<line>" pairs; bundle.test.sh runs a copy of bundle.sh
-# from a temp project, so match on basename (line numbers are unchanged).
-grep -o '+COV [^ ]*:[0-9]*:' "$TRACE" \
-    | sed -e 's/^+COV //' -e 's/:$//' -e 's|.*/||' \
-    | sort -u >"$WORK/hits"
+extract_hits <"$TRACE" >"$WORK/hits"
 
 # Prints the executable line numbers of $1, one per line. Skips what xtrace
 # never reports: blanks, comments, bare block keywords, `done` with a loop

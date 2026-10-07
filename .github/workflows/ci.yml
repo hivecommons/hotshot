@@ -116,6 +116,15 @@ jobs:
               Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Force -Scope CurrentUser -ErrorAction Stop
               break
             } catch {
+              # PowerShellGet v2 intermittently reports "No match was found"
+              # for a published version; PSResourceGet queries the gallery
+              # through a different client, so try it before sleeping.
+              try {
+                Install-PSResource PSScriptAnalyzer -Version 1.25.0 -TrustRepository -Scope CurrentUser -Reinstall -ErrorAction Stop
+                break
+              } catch {
+                Write-Warning "Install-PSResource fallback failed: $($_.Exception.Message)"
+              }
               if ($attempt -ge 3) { throw }
               Write-Warning "Install-Module attempt $attempt failed: $($_.Exception.Message); retrying in $(10 * $attempt)s"
               Start-Sleep -Seconds (10 * $attempt)
@@ -141,6 +150,15 @@ jobs:
               Install-Module Pester -RequiredVersion 6.2.0 -Force -Scope CurrentUser -ErrorAction Stop
               break
             } catch {
+              # PowerShellGet v2 intermittently reports "No match was found"
+              # for a published version; PSResourceGet queries the gallery
+              # through a different client, so try it before sleeping.
+              try {
+                Install-PSResource Pester -Version 6.2.0 -TrustRepository -Scope CurrentUser -Reinstall -ErrorAction Stop
+                break
+              } catch {
+                Write-Warning "Install-PSResource fallback failed: $($_.Exception.Message)"
+              }
               if ($attempt -ge 3) { throw }
               Write-Warning "Install-Module attempt $attempt failed: $($_.Exception.Message); retrying in $(10 * $attempt)s"
               Start-Sleep -Seconds (10 * $attempt)

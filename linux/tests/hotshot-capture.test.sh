@@ -926,6 +926,21 @@ assert_eq "e2e notify success: notification names the CLI" \
 ok=1; [ -s "$shot" ] && ok=0
 check "e2e notify success: screenshot created and echoed" "$ok"
 
+# Interpreter-wrapped claude (comm is the interpreter, only the cmdline names
+# the script, as with `node .../claude`) -> classified claude end to end. The
+# notification is the only output that distinguishes claude from unknown.
+setsid bash "$TMP/wrapbin/claude" >/dev/null 2>&1 &
+wrapped_root=$!
+CHILD_PIDS+=("$wrapped_root")
+sleep 0.2
+rm -f "$NOTIFYLOG"
+shot="$(run_e2e_stubs "$NOTIFYSTUBS" "$wrapped_root" --full)"
+rc=$?
+assert_eq "e2e interpreter-wrapped claude: exit 0" "0" "$rc"
+assert_eq "e2e interpreter-wrapped claude: notification names claude" \
+    "hotshot Screenshot captured (CLI: claude)" "$(cat "$NOTIFYLOG")"
+assert_eq "e2e interpreter-wrapped claude: typed bracketed path" "[$shot] " "$(cat "$TYPELOG")"
+
 # die() -> the failure reason is also sent as a notification.
 printf '#!/usr/bin/env bash\nexit 1\n' >"$NOTIFYSTUBS/maim"
 rm -f "$NOTIFYLOG"

@@ -36,7 +36,7 @@ Notes:
 
 - The Linux test suites are hermetic and do not need a display server, capture tools, or a real gsettings.
 - `swift test` requires macOS because the app targets import AppKit; it runs the suites in `Tests/HotshotCoreTests` (pure decisions) and `Tests/HotshotAppTests` (the pasteboard/watcher/injector shells, the injection coordinator, the menu model and the target tracker in `Sources/HotshotApp`).
-- The Pester suite (`windows/tests/hotshot-capture.tests.ps1`) exercises the Windows capture script logic — including the capture orchestration (clipboard wait loop, multi-format clipboard, typed-injection fallbacks) via injectable scriptblock collaborators, so no Snipping Tool, clipboard, or foreground window is needed — and runs on `windows-latest` in CI; it's independent of the PSScriptAnalyzer lint check above.
+- The Pester suite (`windows/tests/hotshot-capture.tests.ps1`) exercises the Windows capture script logic — including the capture orchestration (clipboard wait loop, multi-format clipboard, typed-injection fallbacks) via injectable scriptblock collaborators, so no Snipping Tool, clipboard, or foreground window is needed — and runs on `windows-latest` in CI; it's independent of the PSScriptAnalyzer lint check above. `windows/tests/hotshot-capture.e2e.tests.ps1` runs the real `hotshot-capture.ps1` in a child `pwsh` against a recording stub of `HotshotCapture.psm1` to check the script's own wiring (parameter defaults, step order, failure exits); like `install.tests.ps1` it needs Windows because the script loads WinForms and `System.Drawing`.
 - If you cannot run a platform-specific check locally, say so in the PR and describe the manual validation you did run.
 
 ## Coding guidelines

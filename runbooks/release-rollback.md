@@ -33,3 +33,5 @@ hotshot is built from source on each machine (`swift build -c release`, or `scri
 - Do not skip or weaken a safety check (quarantine skip, control-character or shell-metacharacter refusal) to restore behavior; those refusals are deliberate.
 - Open an issue with the commit range, the platform, and the diagnostic event names seen. Do not attach screenshot paths or clipboard contents, and review verbose logs first because they can contain local paths.
 - Once a fix has merged, `git checkout main && git pull`, rebuild, and reinstall.
+
+After the incident is resolved, record it using [postmortem-template.md](postmortem-template.md).

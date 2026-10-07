@@ -4,10 +4,12 @@ import XCTest
 
 @testable import HotshotApp
 
-/// Covers the screenshot-folder watch shell extracted in #106. Each test
-/// drives `checkForNewScreenshots()` directly over a temp directory so the
+/// Covers the screenshot-folder watch shell extracted in #106. Most tests
+/// drive `checkForNewScreenshots()` directly over a temp directory so the
 /// snapshot/diff/candidate/newest pipeline and its bounded diagnostics are
-/// exercised without waiting on a real filesystem event.
+/// exercised without waiting on a real filesystem event; the "live watch"
+/// section at the end lets the real `DispatchSource` and debounce timer fire
+/// so the wiring between them is covered too.
 final class ScreenshotWatcherTests: XCTestCase {
     private var directory: String!
     private var events: [Event] = []
@@ -225,5 +227,74 @@ final class ScreenshotWatcherTests: XCTestCase {
         watcher.stop()
 
         XCTAssertNotNil(events.first { $0.event == "watcher.directory_change" })
+    }
+
+    // MARK: - Live watch (real DispatchSource + debounce timer)
+
+    /// A file written into the watched directory must reach `onNewScreenshot`
+    /// through the real kqueue source and the debounce timer — the only path
+    /// the app itself uses. Guards the event mask, `resume()`, and the
+    /// timer-to-check hand-off, none of which the direct-call tests touch.
+    func testLiveWatchInjectsAFileWrittenAfterStart() throws {
+        let watcher = makeWatcher()
+        let fired = expectation(description: "debounced check injects the new screenshot")
+        var injected: [String] = []
+        watcher.onNewScreenshot = {
+            injected.append($0)
+            fired.fulfill()
+        }
+
+        watcher.start()
+        defer { watcher.stop() }
+        let fresh = try writeFile("Screenshot 2026-10-07 at 09.45.00.png")
+        try writeFile("notes.txt")
+
+        wait(for: [fired], timeout: WATCH_DEBOUNCE_SECONDS + 5)
+
+        XCTAssertEqual(injected, [fresh])
+        let newFiles = events.filter { $0.event == "watcher.new_files" }
+        XCTAssertEqual(newFiles.count, 1, "both writes land in one debounced check")
+        XCTAssertEqual(newFiles.first?.count, 1, "notes.txt is not a screenshot")
+    }
+
+    /// Every directory change inside the debounce window must cancel and
+    /// re-arm the timer, so a burst of events yields exactly one check (and
+    /// exactly one injection — `assertForOverFulfill` catches a second).
+    func testRepeatedDirectoryChangesCollapseIntoOneDebouncedCheck() throws {
+        let fresh = try writeFile("shot.png")
+        let watcher = makeWatcher()
+        let fired = expectation(description: "exactly one debounced check")
+        var injected: [String] = []
+        watcher.onNewScreenshot = {
+            injected.append($0)
+            fired.fulfill()
+        }
+
+        watcher.handleDirectoryChange()
+        watcher.handleDirectoryChange()
+        watcher.handleDirectoryChange()
+
+        wait(for: [fired], timeout: WATCH_DEBOUNCE_SECONDS + 5)
+        watcher.stop()
+
+        XCTAssertEqual(injected, [fresh])
+        XCTAssertEqual(events.filter { $0.event == "watcher.new_files" }.count, 1)
+    }
+
+    /// `stop()` during the debounce window must cancel the pending check so
+    /// a watcher that was turned off never injects late.
+    func testStopCancelsAPendingDebouncedCheck() throws {
+        try writeFile("shot.png")
+        let watcher = makeWatcher()
+        let notFired = expectation(description: "no check after stop")
+        notFired.isInverted = true
+        watcher.onNewScreenshot = { _ in notFired.fulfill() }
+
+        watcher.handleDirectoryChange()
+        watcher.stop()
+
+        wait(for: [notFired], timeout: WATCH_DEBOUNCE_SECONDS + 0.5)
+
+        XCTAssertNil(events.first { $0.event == "watcher.new_files" })
     }
 }

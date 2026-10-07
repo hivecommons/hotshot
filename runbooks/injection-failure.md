@@ -34,4 +34,4 @@ If no event is logged at all, hotshot is probably not running: relaunch it and l
 
 ## 4. Escalate
 
-If a regression follows a new build, follow the project's rollback steps for that build and open an issue with the event names seen (not screenshot paths or clipboard contents). Review verbose logs before attaching them, as they may contain local paths.
+If a regression follows a new build, follow [release-rollback.md](release-rollback.md) for that build and open an issue with the event names seen (not screenshot paths or clipboard contents). Review verbose logs before attaching them, as they may contain local paths.

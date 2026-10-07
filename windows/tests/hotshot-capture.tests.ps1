@@ -296,10 +296,33 @@ Describe 'Wait-HotshotClipboardImage' {
 }
 
 Describe 'Get-HotshotShotPath' {
-    It 'names the PNG hotshot-yyyyMMdd-HHmmss.png inside the target directory' {
-        $path = Get-HotshotShotPath -Dir (Join-Path 'C:' 'Shots') -Timestamp ([datetime]'2026-03-04T05:06:07')
-        Split-Path $path -Leaf | Should -Be 'hotshot-20260304-050607.png'
+    It 'names the PNG hotshot-yyyyMMdd-HHmmss-fff.png inside the target directory' {
+        $path = Get-HotshotShotPath -Dir (Join-Path 'C:' 'Shots') -Timestamp ([datetime]'2026-03-04T05:06:07.123') `
+            -Exists { param($p) $false }
+        Split-Path $path -Leaf | Should -Be 'hotshot-20260304-050607-123.png'
         Split-Path $path -Parent | Should -Be (Join-Path 'C:' 'Shots')
+    }
+
+    It 'appends a -N suffix instead of reusing a name that is already taken' {
+        $taken = @('hotshot-20260304-050607-123.png', 'hotshot-20260304-050607-123-1.png')
+        $path = Get-HotshotShotPath -Dir (Join-Path 'C:' 'Shots') -Timestamp ([datetime]'2026-03-04T05:06:07.123') `
+            -Exists { param($p) (Split-Path $p -Leaf) -in $taken }.GetNewClosure()
+        Split-Path $path -Leaf | Should -Be 'hotshot-20260304-050607-123-2.png'
+    }
+
+    It 'gives two same-instant captures distinct files on disk' {
+        $dir = Join-Path $TestDrive 'shots'
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $stamp = [datetime]'2026-03-04T05:06:07.123'
+
+        $first = Get-HotshotShotPath -Dir $dir -Timestamp $stamp
+        Set-Content -LiteralPath $first -Value 'first'
+        $second = Get-HotshotShotPath -Dir $dir -Timestamp $stamp
+        Set-Content -LiteralPath $second -Value 'second'
+
+        $second | Should -Not -Be $first
+        Get-Content -LiteralPath $first | Should -Be 'first'
+        Get-Content -LiteralPath $second | Should -Be 'second'
     }
 }
 
@@ -348,7 +371,8 @@ Describe 'Invoke-HotshotInjection' {
     BeforeEach {
         $script:Calls = [System.Collections.Generic.List[string]]::new()
         $script:Fakes = @{
-            SetForeground = { param($h) $script:Calls.Add("foreground:$h") }
+            SetForeground = { param($h) $script:Calls.Add("foreground:$h"); $true }
+            GetForeground = { [IntPtr]42 }
             SendKeys      = { param($k) $script:Calls.Add("send:$k") }
             Sleep         = { $script:Calls.Add('sleep') }
         }
@@ -414,5 +438,36 @@ Describe 'Invoke-HotshotInjection' {
 
         $script:Calls | Should -Be @('foreground:42', 'sleep')
         "$($script:Warnings)" | Should -Be 'hotshot [WARN] injection.sendkeys_failed: access denied'
+    }
+
+    It 'skips typing with injection.focus_lost when SetForegroundWindow is refused' {
+        $fakes = $script:Fakes.Clone()
+        $fakes.SetForeground = { param($h) $script:Calls.Add("foreground:$h"); $false }
+        $fakes.GetForeground = { [IntPtr]7 }
+        Invoke-HotshotInjection -Text '[C:\Shots\a.png] ' -TerminalHandle $script:Hwnd -ShotPath 'C:\Shots\a.png' `
+            @fakes -WarningVariable w -WarningAction SilentlyContinue
+
+        $script:Calls | Should -Be @('foreground:42', 'sleep')
+        "$w" | Should -Be 'hotshot [WARN] injection.focus_lost: SetForegroundWindow=False; screenshot saved and on the clipboard'
+    }
+
+    It 'skips typing when focus moved away during the sleep even though SetForegroundWindow succeeded' {
+        $fakes = $script:Fakes.Clone()
+        $fakes.GetForeground = { [IntPtr]7 }
+        Invoke-HotshotInjection -Text '[C:\Shots\a.png] ' -TerminalHandle $script:Hwnd -ShotPath 'C:\Shots\a.png' `
+            @fakes -WarningVariable w -WarningAction SilentlyContinue
+
+        $script:Calls | Should -Be @('foreground:42', 'sleep')
+        "$w" | Should -Be 'hotshot [WARN] injection.focus_lost: SetForegroundWindow=True; screenshot saved and on the clipboard'
+    }
+
+    It 'types when SetForegroundWindow reports false but the terminal is already in the foreground' {
+        $fakes = $script:Fakes.Clone()
+        $fakes.SetForeground = { param($h) $script:Calls.Add("foreground:$h"); $false }
+        Invoke-HotshotInjection -Text '[C:\Shots\a.png] ' -TerminalHandle $script:Hwnd -ShotPath 'C:\Shots\a.png' `
+            @fakes -WarningVariable w -WarningAction SilentlyContinue
+
+        $script:Calls | Should -Be @('foreground:42', 'sleep', 'send:{[}C:\Shots\a.png{]} ')
+        $w | Should -BeNullOrEmpty
     }
 }

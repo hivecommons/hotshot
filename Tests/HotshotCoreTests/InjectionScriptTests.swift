@@ -91,14 +91,45 @@ final class InjectionScriptTests: XCTestCase {
     // MARK: - screenshotSavePath
 
     func testScreenshotSavePathNamingContract() {
-        let path = screenshotSavePath(directory: "/tmp/shots", date: Date(timeIntervalSince1970: 0))
+        let path = screenshotSavePath(
+            directory: "/tmp/shots", date: Date(timeIntervalSince1970: 0.5)) { _ in false }
         let name = (path as NSString).lastPathComponent
         XCTAssertTrue(path.hasPrefix("/tmp/shots/"))
         XCTAssertTrue(name.hasPrefix("hotshot-"))
         XCTAssertTrue(name.hasSuffix(".png"))
         XCTAssertNotNil(
-            name.range(of: #"^hotshot-\d{8}-\d{6}\.png$"#, options: .regularExpression),
+            name.range(of: #"^hotshot-\d{8}-\d{6}-500\.png$"#, options: .regularExpression),
             "unexpected screenshot file name: \(name)")
+    }
+
+    func testScreenshotSavePathAddsSuffixWhenNameIsTaken() {
+        let date = Date(timeIntervalSince1970: 0.5)
+        let free = screenshotSavePath(directory: "/tmp/shots", date: date) { _ in false }
+        let base = (free as NSString).deletingPathExtension
+        var taken: Set<String> = [free]
+        let second = screenshotSavePath(directory: "/tmp/shots", date: date) { taken.contains($0) }
+        XCTAssertEqual(second, "\(base)-1.png")
+        taken.insert(second)
+        let third = screenshotSavePath(directory: "/tmp/shots", date: date) { taken.contains($0) }
+        XCTAssertEqual(third, "\(base)-2.png")
+        XCTAssertTrue((third as NSString).lastPathComponent.hasPrefix("hotshot-"))
+    }
+
+    func testScreenshotSavePathSameInstantYieldsDistinctFilesOnDisk() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hotshot-save-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let date = Date(timeIntervalSince1970: 1_700_000_000.5)
+
+        let first = screenshotSavePath(directory: dir.path, date: date)
+        try Data("first".utf8).write(to: URL(fileURLWithPath: first), options: .withoutOverwriting)
+        let second = screenshotSavePath(directory: dir.path, date: date)
+        try Data("second".utf8).write(to: URL(fileURLWithPath: second), options: .withoutOverwriting)
+
+        XCTAssertNotEqual(first, second)
+        XCTAssertEqual(try String(contentsOfFile: first, encoding: .utf8), "first")
+        XCTAssertEqual(try String(contentsOfFile: second, encoding: .utf8), "second")
     }
 
     func testScreenshotSavePathIsSkippedByWatcher() {

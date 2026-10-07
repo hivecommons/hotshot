@@ -58,6 +58,7 @@ eval "$(extract_fn descendants)"
 eval "$(extract_fn classify_cli)"
 eval "$(extract_fn log_event)"
 eval "$(extract_fn redact)"
+eval "$(extract_fn unique_shot_path)"
 
 # ==============================================================================
 # shell_escape
@@ -122,6 +123,25 @@ assert_eq "redact: reveals the value under HOTSHOT_VERBOSE_LOGGING=1" \
     "$(HOTSHOT_VERBOSE_LOGGING=1 redact '/home/u/Pictures/hotshot/shot-1.png')"
 assert_eq "redact: does not treat other truthy values as opt-in" \
     "<redacted>" "$(HOTSHOT_VERBOSE_LOGGING=true redact '/tmp/hotshot/shot-1.png')"
+
+# ==============================================================================
+# unique_shot_path (issue #167: same-instant captures must not overwrite)
+# ==============================================================================
+UNIQDIR="$TMP/uniq"
+mkdir -p "$UNIQDIR"
+first="$(unique_shot_path "$UNIQDIR" 20260304-050607-123)"
+assert_eq "unique_shot_path: free name keeps the plain timestamp" \
+    "$UNIQDIR/hotshot-20260304-050607-123.png" "$first"
+printf 'PNG' >"$first"
+second="$(unique_shot_path "$UNIQDIR" 20260304-050607-123)"
+assert_eq "unique_shot_path: taken name gets a -1 suffix" \
+    "$UNIQDIR/hotshot-20260304-050607-123-1.png" "$second"
+printf 'PNG' >"$second"
+third="$(unique_shot_path "$UNIQDIR" 20260304-050607-123)"
+assert_eq "unique_shot_path: suffix keeps counting" \
+    "$UNIQDIR/hotshot-20260304-050607-123-2.png" "$third"
+[ "$(find "$UNIQDIR" -name 'hotshot-*.png' | wc -l)" -eq 2 ]
+check "unique_shot_path: earlier captures are left intact" $?
 
 # ==============================================================================
 # descendants / classify_cli against a real /proc tree
@@ -607,6 +627,78 @@ grep -q "injection.xdotool_failed" "$TMP/failtype.err"
 check "e2e xdotool type failure: warning emitted" $?
 ok=1; [ -s "$shot" ] && ok=0
 check "e2e xdotool type failure: screenshot still created and echoed" "$ok"
+
+# Refocusing the saved terminal fails (window closed / WM refused) -> nothing
+# is typed into whatever has focus; capture + clipboard still succeed.
+FAILACTIVATE="$TMP/failactivate"
+mkdir -p "$FAILACTIVATE"
+cp "$STUBS/maim" "$STUBS/xclip" "$FAILACTIVATE/"
+cat >"$FAILACTIVATE/xdotool" <<EOF
+#!/usr/bin/env bash
+case "\$1" in
+    getactivewindow) echo 4242 ;;
+    getwindowpid) echo "\${HOTSHOT_TEST_FOCUS_PID:?}" ;;
+    windowactivate) exit 1 ;;
+    type) shift; while [ "\$1" != "--" ]; do shift; done; shift; printf '%s' "\$*" >>"$TYPELOG" ;;
+esac
+EOF
+chmod +x "$FAILACTIVATE/xdotool"
+shot="$(run_e2e_stubs "$FAILACTIVATE" "$plain_root" --full 2>"$TMP/failactivate.err")"
+rc=$?
+assert_eq "e2e windowactivate failure: exit 0" "0" "$rc"
+[ ! -e "$TYPELOG" ]
+check "e2e windowactivate failure: nothing typed" $?
+grep -q "hotshot \[WARN\] injection.focus_lost" "$TMP/failactivate.err"
+check "e2e windowactivate failure: focus_lost warning emitted" $?
+ok=1; [ -s "$shot" ] && ok=0
+check "e2e windowactivate failure: screenshot still created and echoed" "$ok"
+grep -q -- "-t image/png -i $shot" "$CLIPLOG"
+check "e2e windowactivate failure: clipboard still loaded" $?
+
+# windowactivate reports success but another window holds focus afterwards
+# -> still nothing typed.
+STOLEN="$TMP/stolenfocus"
+mkdir -p "$STOLEN"
+cp "$STUBS/maim" "$STUBS/xclip" "$STOLEN/"
+cat >"$STOLEN/xdotool" <<EOF
+#!/usr/bin/env bash
+case "\$1" in
+    getactivewindow)
+        if [ -e "$STOLEN/activated" ]; then echo 9999; else echo 4242; fi ;;
+    getwindowpid) echo "\${HOTSHOT_TEST_FOCUS_PID:?}" ;;
+    windowactivate) : >"$STOLEN/activated" ;;
+    type) shift; while [ "\$1" != "--" ]; do shift; done; shift; printf '%s' "\$*" >>"$TYPELOG" ;;
+esac
+EOF
+chmod +x "$STOLEN/xdotool"
+rm -f "$STOLEN/activated"
+shot="$(run_e2e_stubs "$STOLEN" "$plain_root" --full 2>"$TMP/stolen.err")"
+rc=$?
+assert_eq "e2e focus stolen after activate: exit 0" "0" "$rc"
+[ ! -e "$TYPELOG" ]
+check "e2e focus stolen after activate: nothing typed" $?
+grep -q "injection.focus_lost" "$TMP/stolen.err"
+check "e2e focus stolen after activate: focus_lost warning emitted" $?
+ok=1; [ -s "$shot" ] && ok=0
+check "e2e focus stolen after activate: screenshot still created and echoed" "$ok"
+
+# Two captures in the same instant (frozen clock) -> two distinct files.
+FROZEN="$TMP/frozenclock"
+mkdir -p "$FROZEN"
+cp "$STUBS/maim" "$STUBS/xclip" "$STUBS/xdotool" "$FROZEN/"
+printf '#!/usr/bin/env bash\necho 20260304-050607-123\n' >"$FROZEN/date"
+chmod +x "$FROZEN/date"
+rm -rf "$TMP/frozenshots"
+shot1="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" DISPLAY=:99 PATH="$FROZEN:/usr/bin:/bin" \
+    HOTSHOT_DIR="$TMP/frozenshots" HOTSHOT_TEST_FOCUS_PID="$plain_root" bash "$SCRIPT" --full --no-type 2>/dev/null)"
+shot2="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" DISPLAY=:99 PATH="$FROZEN:/usr/bin:/bin" \
+    HOTSHOT_DIR="$TMP/frozenshots" HOTSHOT_TEST_FOCUS_PID="$plain_root" bash "$SCRIPT" --full --no-type 2>/dev/null)"
+assert_eq "e2e same-instant captures: first keeps the millisecond name" \
+    "$TMP/frozenshots/hotshot-20260304-050607-123.png" "$shot1"
+assert_eq "e2e same-instant captures: second gets a -1 suffix" \
+    "$TMP/frozenshots/hotshot-20260304-050607-123-1.png" "$shot2"
+ok=1; [ -s "$shot1" ] && [ -s "$shot2" ] && ok=0
+check "e2e same-instant captures: both files exist" "$ok"
 
 # Wayland without wl-copy -> install hint for wl-clipboard, typing still works.
 NOWLCOPY="$TMP/nowlcopy"

@@ -153,9 +153,23 @@ public func newestInjectableScreenshot(
 /// Path under `directory` where a clipboard image is saved before injection.
 /// The `hotshot-` prefix is a contract with `newestInjectableScreenshot`,
 /// which skips such files so the watcher never re-injects its own output.
-public func screenshotSavePath(directory: String, date: Date = Date()) -> String {
+/// The name carries milliseconds and, when that name is already taken, a
+/// `-N` suffix, so two saves in the same instant never overwrite each other
+/// (parity with the Linux and Windows ports).
+public func screenshotSavePath(
+    directory: String,
+    date: Date = Date(),
+    fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
+) -> String {
     let formatter = DateFormatter()
-    formatter.dateFormat = "yyyyMMdd-HHmmss"
-    return (directory as NSString).appendingPathComponent(
-        "hotshot-\(formatter.string(from: date)).png")
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyyMMdd-HHmmss-SSS"
+    let base = "hotshot-\(formatter.string(from: date))"
+    var path = (directory as NSString).appendingPathComponent("\(base).png")
+    var suffix = 1
+    while fileExists(path) {
+        path = (directory as NSString).appendingPathComponent("\(base)-\(suffix).png")
+        suffix += 1
+    }
+    return path
 }

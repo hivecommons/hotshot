@@ -4,8 +4,9 @@ Take a screenshot, and it lands in your terminal — the Linux port of hotshot.
 One dependency-light shell script; no daemon. You bind it to a hotkey with
 your desktop environment, press the hotkey, select a region, and hotshot:
 
-1. Saves the PNG to `~/Pictures/hotshot/hotshot-YYYYMMDD-HHMMSS.png`
-   (override with `HOTSHOT_DIR` or `--dir`)
+1. Saves the PNG to `~/Pictures/hotshot/hotshot-YYYYMMDD-HHMMSS-mmm.png`
+   (milliseconds, plus a `-N` suffix if the name is already taken; override
+   the folder with `HOTSHOT_DIR` or `--dir`)
 2. Loads the clipboard with the image (and the text path too when CopyQ is
    running — see [Parity notes](#parity-notes))
 3. Detects which AI CLI is running in the terminal that was focused when you
@@ -88,7 +89,9 @@ hotshot-capture [--region|--full] [--no-type] [--dir DIR]
 - **Focus tracking**: instead of a menu-bar app that remembers your last
   terminal, the Linux port captures the focused window at hotkey press time —
   press the hotkey while your terminal is focused, then select the region.
-  On Wayland, focused-window PID detection is implemented for sway and
+  On X11, if that window cannot be brought back to the front afterwards,
+  nothing is typed (`injection.focus_lost`); the screenshot is still saved
+  and on the clipboard. On Wayland, focused-window PID detection is implemented for sway and
   hyprland; on other compositors CLI detection falls back to the bracketed
   default (Claude-compatible).
 - **No file watcher**: the hotkey performs capture + inject in one step, so

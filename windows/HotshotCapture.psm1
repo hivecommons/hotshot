@@ -136,9 +136,20 @@ function Get-HotshotShotPath {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string]$Dir,
-        [datetime]$Timestamp = (Get-Date)
+        [datetime]$Timestamp = (Get-Date),
+        [scriptblock]$Exists = { param($p) Test-Path -LiteralPath $p }
     )
-    return Join-Path $Dir ("hotshot-{0:yyyyMMdd-HHmmss}.png" -f $Timestamp)
+    # Millisecond timestamp plus a -N suffix when the name is already taken,
+    # so two captures in the same instant never overwrite each other (parity
+    # with the macOS app and the Linux port).
+    $base = "hotshot-{0:yyyyMMdd-HHmmss-fff}" -f $Timestamp
+    $path = Join-Path $Dir "$base.png"
+    $n = 1
+    while (& $Exists $path) {
+        $path = Join-Path $Dir "$base-$n.png"
+        $n++
+    }
+    return $path
 }
 
 function New-HotshotClipboardDataObject {
@@ -182,7 +193,8 @@ function Invoke-HotshotInjection {
         [IntPtr]$TerminalHandle = [IntPtr]::Zero,
         [switch]$NoType,
         [Parameter(Mandatory)] [string]$ShotPath,
-        [scriptblock]$SetForeground = { param($h) [void][Hotshot.Native]::SetForegroundWindow($h) },
+        [scriptblock]$SetForeground = { param($h) [Hotshot.Native]::SetForegroundWindow($h) },
+        [scriptblock]$GetForeground = { [Hotshot.Native]::GetForegroundWindow() },
         [scriptblock]$SendKeys = { param($k) [System.Windows.Forms.SendKeys]::SendWait($k) },
         [scriptblock]$Sleep = { Start-Sleep -Milliseconds 300 }
     )
@@ -193,8 +205,17 @@ function Invoke-HotshotInjection {
         Write-Warning (Format-HotshotDiagnostic -Severity WARN -Event 'injection.control_chars_refused' `
                 -Detail "path=$(Get-RedactedPath -Path $ShotPath -VerboseLogging $verboseLogging)")
     } elseif ($TerminalHandle -ne [IntPtr]::Zero) {
-        [void](& $SetForeground $TerminalHandle)
+        $refocused = & $SetForeground $TerminalHandle
         & $Sleep
+        # SetForegroundWindow can be refused (foreground lock, UIPI) and focus
+        # can move during the sleep; never type into some other window. The
+        # screenshot is already saved and on the clipboard.
+        $foreground = & $GetForeground
+        if ($null -eq $foreground -or [IntPtr]$foreground -ne $TerminalHandle) {
+            Write-Warning (Format-HotshotDiagnostic -Severity WARN -Event 'injection.focus_lost' `
+                    -Detail "SetForegroundWindow=$([bool]$refocused); screenshot saved and on the clipboard")
+            return
+        }
         $escaped = ConvertTo-SendKeysEscaped -Text $Text
         try {
             & $SendKeys $escaped

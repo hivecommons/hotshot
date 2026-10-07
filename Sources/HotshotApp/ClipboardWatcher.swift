@@ -144,7 +144,8 @@ public final class ClipboardWatcher {
         let path = screenshotSavePath(directory: dir)
 
         do {
-            try png.write(to: URL(fileURLWithPath: path))
+            // Exclusive create: never clobber a capture that raced us to the name.
+            try png.write(to: URL(fileURLWithPath: path), options: .withoutOverwriting)
         } catch {
             // Foundation write errors carry NSFilePath/the filename in their
             // description, which would bypass the redaction applied to `path`.

@@ -94,7 +94,7 @@ hotshot remembers which terminal you last clicked on. It supports two injection 
 
 **Clipboard mode** (on by default):
 1. You take a screenshot to clipboard with ⌃⌘⇧3 or ⌃⌘⇧4
-2. hotshot detects the new image on the clipboard, saves it to your screenshot folder as `hotshot-YYYYMMDD-HHMMSS.png`, and rewrites the clipboard with the image **plus** the file's plain-text path and file URL
+2. hotshot detects the new image on the clipboard, saves it to your screenshot folder as `hotshot-YYYYMMDD-HHMMSS-mmm.png` (a `-N` suffix is added if that name is already taken), and rewrites the clipboard with the image **plus** the file's plain-text path and file URL
 3. Sends Ctrl-V to your last active terminal — Claude Code reads the image data; CLIs like GitHub Copilot CLI get the file path when you paste as text (⌘V)
 
 Both modes bring the terminal back to the front automatically. No servers, no browser extensions.

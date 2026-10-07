@@ -96,8 +96,21 @@ else
 fi
 
 # --- 1. capture --------------------------------------------------------------
+# Millisecond timestamp plus a -N suffix when the name is already taken, so two
+# captures in the same instant never overwrite each other (parity with the
+# macOS app and the Windows port).
+unique_shot_path() { # $1 = directory, $2 = timestamp; echoes a path that does not exist yet
+    local base="$1/hotshot-$2" path n=1
+    path="$base.png"
+    while [ -e "$path" ]; do
+        path="$base-$n.png"
+        n=$((n + 1))
+    done
+    printf '%s' "$path"
+}
+
 mkdir -p "$SHOT_DIR" || die "cannot create screenshot directory $(redact "$SHOT_DIR")"
-SHOT_PATH="$SHOT_DIR/hotshot-$(date +%Y%m%d-%H%M%S).png"
+SHOT_PATH="$(unique_shot_path "$SHOT_DIR" "$(date +%Y%m%d-%H%M%S-%3N)")"
 
 if [ "$SESSION" = "x11" ]; then
     if have maim; then
@@ -239,9 +252,16 @@ fi
 if [ "$DO_TYPE" = 1 ]; then
     if [ "$SESSION" = "x11" ]; then
         if have xdotool; then
-            [ -n "$FOCUS_WIN" ] && xdotool windowactivate --sync "$FOCUS_WIN" 2>/dev/null
-            xdotool type --delay 15 -- "$TEXT" ||
-                log_event WARN injection.xdotool_failed
+            # Never type into whatever window happens to be focused when the
+            # saved terminal cannot be brought back (closed, WM refused, focus
+            # stolen); the screenshot is already saved and on the clipboard.
+            if [ -n "$FOCUS_WIN" ] && { ! xdotool windowactivate --sync "$FOCUS_WIN" 2>/dev/null ||
+                [ "$(xdotool getactivewindow 2>/dev/null)" != "$FOCUS_WIN" ]; }; then
+                log_event WARN injection.focus_lost "screenshot saved and on the clipboard"
+            else
+                xdotool type --delay 15 -- "$TEXT" ||
+                    log_event WARN injection.xdotool_failed
+            fi
         else
             log_event WARN injection.tool_missing "install 'xdotool' for typed injection; path=$(redact "$SHOT_PATH")"
         fi

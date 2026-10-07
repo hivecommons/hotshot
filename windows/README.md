@@ -5,15 +5,17 @@ hotshot. A dependency-light PowerShell script driven by a global hotkey:
 press the hotkey while your terminal is focused, snip a region with the
 built-in Snipping Tool overlay, and hotshot:
 
-1. Saves the PNG to `%USERPROFILE%\Pictures\hotshot\hotshot-YYYYMMDD-HHMMSS.png`
-   (override with the `HOTSHOT_DIR` environment variable or `-Dir`)
+1. Saves the PNG to `%USERPROFILE%\Pictures\hotshot\hotshot-YYYYMMDD-HHMMSS-mmm.png`
+   (milliseconds, plus a `-N` suffix if the name is already taken; override
+   the folder with the `HOTSHOT_DIR` environment variable or `-Dir`)
 2. Rewrites the clipboard with one multi-format entry: the **image**, the
    **plain-text path**, and a **file drop list** (the Explorer-copy
    equivalent of macOS' file URL) — so Ctrl-V works in Claude Code, GUI
    apps, and CLIs that paste text
 3. Detects which AI CLI is running in the terminal that was focused before
    the overlay (by walking its child processes — Windows Terminal, conhost,
-   etc.), brings the terminal back to the front, and types the format that
+   etc.), brings the terminal back to the front, and — only if it really is
+   in the foreground again — types the format that
    CLI understands:
 
 | CLI in focused terminal | Typed injection |

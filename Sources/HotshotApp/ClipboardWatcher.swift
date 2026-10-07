@@ -83,17 +83,24 @@ public final class ClipboardWatcher {
     /// reads image data on Ctrl-V), a file URL (Finder-copy equivalence), and
     /// a shell-escaped plain-text POSIX path (GitHub Copilot CLI and other
     /// CLIs paste the path as text) all at once.
-    func writePasteboard(pngData: Data, path: String) {
+    /// Returns false when the pasteboard rejected the write.
+    @discardableResult
+    func writePasteboard(pngData: Data, path: String) -> Bool {
         let item = NSPasteboardItem()
         item.setData(pngData, forType: .png)
         item.setString(URL(fileURLWithPath: path).absoluteString, forType: .fileURL)
         item.setString(shellEscapedPath(path), forType: .string)
 
         pasteboard.clearContents()
-        pasteboard.writeObjects([item])
+        let written = pasteboard.writeObjects([item])
         // Don't let the watcher re-trigger on our own write.
         lastChangeCount = pasteboard.changeCount
+        guard written else {
+            diagnostic("pasteboard.write_failed", .error, path, nil)
+            return false
+        }
         diagnostic("pasteboard.loaded", .info, path, nil)
+        return true
     }
 
     /// Load an on-disk screenshot onto the pasteboard (image + URL + path).
@@ -118,7 +125,8 @@ public final class ClipboardWatcher {
 
     /// Save the clipboard image to the screenshot folder and rewrite the
     /// pasteboard with image + file URL + plain-text path representations.
-    /// Returns the saved path, or nil if there was no image to save.
+    /// Returns the saved path, or nil if there was no image to save or the
+    /// pasteboard write failed.
     @discardableResult
     public func enrichWithSavedImage() -> String? {
         let dir = (screenshotDirectory() as NSString).expandingTildeInPath
@@ -159,7 +167,7 @@ public final class ClipboardWatcher {
             return nil
         }
 
-        writePasteboard(pngData: png, path: path)
+        guard writePasteboard(pngData: png, path: path) else { return nil }
         return path
     }
 }

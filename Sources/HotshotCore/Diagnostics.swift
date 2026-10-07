@@ -69,6 +69,7 @@ public enum DiagnosticEvent: String, CaseIterable {
 
     case pasteboardLoaded = "pasteboard.loaded"
     case pasteboardReadFailed = "pasteboard.read_failed"
+    case pasteboardWriteFailed = "pasteboard.write_failed"
     case pasteboardPNGConversionFailed = "pasteboard.png_conversion_failed"
 
     case screenshotInjectLast = "screenshot.inject_last"

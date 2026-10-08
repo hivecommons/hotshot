@@ -6,7 +6,8 @@ your desktop environment, press the hotkey, select a region, and hotshot:
 
 1. Saves the PNG to `~/Pictures/hotshot/hotshot-YYYYMMDD-HHMMSS-mmm.png`
    (milliseconds, plus a `-N` suffix if the name is already taken; override
-   the folder with `HOTSHOT_DIR` or `--dir`)
+   the folder with `HOTSHOT_DIR` or `--dir`; `~/Pictures` is resolved with
+   `xdg-user-dir PICTURES` when available, or an exported `XDG_PICTURES_DIR`)
 2. Loads the clipboard with the image (and the text path too when CopyQ is
    running — see [Parity notes](#parity-notes))
 3. Detects which AI CLI is running in the terminal that was focused when you

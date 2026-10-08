@@ -54,6 +54,8 @@ extract_fn() { # $1 = function name
 }
 eval "$(extract_fn shell_escape)"
 eval "$(extract_fn has_control_chars)"
+eval "$(extract_fn has_shell_metachars)"
+eval "$(extract_fn default_pictures_dir)"
 eval "$(extract_fn descendants)"
 eval "$(extract_fn classify_cli)"
 eval "$(extract_fn log_event)"
@@ -102,6 +104,37 @@ has_control_chars "/tmp/a$(printf '\342\200\250')b/hotshot-1.png"
 check "has_control_chars: U+2028 line separator -> yes" $?
 has_control_chars "/tmp/a$(printf '\342\200\251')b/hotshot-1.png"
 check "has_control_chars: U+2029 paragraph separator -> yes" $?
+
+# ==============================================================================
+# has_shell_metachars (parity with macOS containsShellCommandMetacharacters)
+# ==============================================================================
+! has_shell_metachars '/home/u/Pictures/hotshot-1.png'
+check "has_shell_metachars: plain path -> no" $?
+! has_shell_metachars '/home/u/spaced dir/(a)/hotshot-1.png'
+check "has_shell_metachars: space and parens are not in the set" $?
+for mc in '$' '`' ';' '|' '&' '<' '>' '!'; do
+    has_shell_metachars "/home/u/a${mc}b/hotshot-1.png"
+    check "has_shell_metachars: '$mc' -> yes" $?
+done
+
+# ==============================================================================
+# default_pictures_dir (issue #174: xdg-user-dirs does not export the variable)
+# ==============================================================================
+XDGSTUBS="$TMP/xdgstubs"
+mkdir -p "$XDGSTUBS"
+cat >"$XDGSTUBS/xdg-user-dir" <<'STUB'
+#!/usr/bin/env bash
+[ "$1" = "PICTURES" ] && echo "/home/u/Bilder"
+STUB
+chmod +x "$XDGSTUBS/xdg-user-dir"
+assert_eq "default_pictures_dir: uses xdg-user-dir PICTURES" "/home/u/Bilder" \
+    "$(unset XDG_PICTURES_DIR; PATH="$XDGSTUBS:$PATH" default_pictures_dir)"
+assert_eq "default_pictures_dir: exported XDG_PICTURES_DIR wins" "/mnt/pics" \
+    "$(XDG_PICTURES_DIR=/mnt/pics PATH="$XDGSTUBS:$PATH" default_pictures_dir)"
+NOXDG="$TMP/noxdg"
+mkdir -p "$NOXDG"
+assert_eq "default_pictures_dir: falls back to \$HOME/Pictures" "/home/x/Pictures" \
+    "$(unset XDG_PICTURES_DIR; HOME=/home/x PATH="$NOXDG" default_pictures_dir)"
 
 # ==============================================================================
 # log_event / redact (issue #77: bounded, redacted local diagnostics)
@@ -311,6 +344,21 @@ check "e2e control-char dir: screenshot still created" $?
 check "e2e control-char dir: nothing typed" $?
 grep -q "injection.control_chars_refused" "$TMP/e2e-ctrl.err"
 check "e2e control-char dir: refusal warning printed" $?
+
+# Shell metacharacter in the directory -> bracketed path refused, capture proceeds.
+root="$(spawn_tree claude)"
+mc_dir="$TMP/shots;rm"
+out="$(run_e2e "$root" --full --dir "$mc_dir" 2>"$TMP/e2e-meta.err")"
+rc=$?
+assert_eq "e2e metachar dir: exit 0" "0" "$rc"
+[ -s "$out" ]
+check "e2e metachar dir: screenshot still created" $?
+[ ! -e "$TYPELOG" ]
+check "e2e metachar dir: nothing typed" $?
+grep -q "injection.shell_metachars_refused" "$TMP/e2e-meta.err"
+check "e2e metachar dir: refusal warning printed" $?
+grep -q -- "-t image/png -i $out" "$CLIPLOG"
+check "e2e metachar dir: clipboard still loaded" $?
 
 # Capture failure (maim dies) -> script dies, no typing.
 cat >"$STUBS/failmaim" <<'EOF'

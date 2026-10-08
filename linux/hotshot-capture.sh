@@ -20,7 +20,20 @@ set -u
 
 MODE="region"
 DO_TYPE=1
-SHOT_DIR="${HOTSHOT_DIR:-${XDG_PICTURES_DIR:-$HOME/Pictures}/hotshot}"
+
+# xdg-user-dirs keeps PICTURES in ~/.config/user-dirs.dirs and does not export
+# it, so ask `xdg-user-dir`; an exported XDG_PICTURES_DIR still wins.
+default_pictures_dir() {
+    if [ -n "${XDG_PICTURES_DIR:-}" ]; then
+        printf '%s' "$XDG_PICTURES_DIR"
+    elif command -v xdg-user-dir >/dev/null 2>&1; then
+        xdg-user-dir PICTURES
+    else
+        printf '%s' "$HOME/Pictures"
+    fi
+}
+
+SHOT_DIR="${HOTSHOT_DIR:-$(default_pictures_dir)/hotshot}"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -239,9 +252,25 @@ has_control_chars() {
     return 1
 }
 
+# Parity with the macOS app (HotshotCore.containsShellCommandMetacharacters,
+# SHELL_COMMAND_METACHARACTERS): the bracketed "[path] " form is typed
+# verbatim, so a path containing these characters must not be injected.
+has_shell_metachars() {
+    case "$1" in
+        *['$`;|&<>!']*) return 0 ;;
+    esac
+    return 1
+}
+
 case "$CLI" in
     plain) TEXT="$(shell_escape "$SHOT_PATH") " ;;
-    *) TEXT="[$SHOT_PATH] " ;;
+    *)
+        TEXT="[$SHOT_PATH] "
+        if [ "$DO_TYPE" = 1 ] && has_shell_metachars "$SHOT_PATH"; then
+            log_event WARN injection.shell_metachars_refused "screenshot saved and on the clipboard"
+            DO_TYPE=0
+        fi
+        ;;
 esac
 
 # --- 4. typed injection ------------------------------------------------------

@@ -63,18 +63,21 @@ function Get-HotshotTypedText {
 
     switch ($Cli) {
         'plain' {
-            # A literal quote cannot be protected by double-quoting, so refuse
-            # it (as the bracketed form refuses metacharacters).
-            if ($ShotPath.Contains('"')) { return '' }
+            # Double-quoting cannot protect a literal quote, and PowerShell
+            # still interpolates `$(...)`/`$var` and backtick escapes inside a
+            # double-quoted string, so refuse those (as the bracketed form
+            # refuses metacharacters).
+            if ($ShotPath -match '["$`]') { return '' }
             # Windows shells take a double-quoted path; quote whenever it has
             # whitespace or a shell metacharacter.
-            if ($ShotPath -match '[\s&;|<>!$`()^%]') { return '"' + $ShotPath + '" ' }
+            if ($ShotPath -match '[\s&;|<>!()^%]') { return '"' + $ShotPath + '" ' }
             return $ShotPath + ' '
         }
         default {
             # The bracketed form is typed verbatim into an unknown shell, so it
             # is refused for shell command metacharacters (the plain form
-            # double-quotes them instead, and refuses only a literal quote).
+            # double-quotes them instead, and refuses only a literal quote and
+            # the characters PowerShell interpolates inside double quotes).
             if (Test-HotshotShellMetacharacters -Path $ShotPath) { return '' }
             return "[$ShotPath] "
         }

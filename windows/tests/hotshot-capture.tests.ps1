@@ -180,10 +180,21 @@ Describe 'Get-HotshotTypedText' {
     It 'double-quotes the plain form for paths with shell metacharacters' {
         Get-HotshotTypedText -ShotPath 'C:\Shots\a&calc.png' -Cli plain | Should -Be '"C:\Shots\a&calc.png" '
         Get-HotshotTypedText -ShotPath 'C:\My Shots\a&b.png' -Cli plain | Should -Be '"C:\My Shots\a&b.png" '
+        foreach ($path in @('C:\Shots\a;b.png', 'C:\Shots\a|b.png', 'C:\Shots\a<b.png', 'C:\Shots\a>b.png',
+                'C:\Shots\a!b.png', 'C:\Shots\a(b).png', 'C:\Shots\a^b.png', 'C:\Shots\a%b.png')) {
+            Get-HotshotTypedText -ShotPath $path -Cli plain | Should -Be ('"' + $path + '" ')
+        }
     }
 
     It 'refuses the plain form for paths containing a literal double quote' {
         Get-HotshotTypedText -ShotPath 'C:\Shots\a"&calc.png' -Cli plain | Should -Be ''
+    }
+
+    It 'refuses the plain form for characters PowerShell interpolates inside double quotes' {
+        Get-HotshotTypedText -ShotPath 'C:\Shots\$(id).png' -Cli plain | Should -Be ''
+        Get-HotshotTypedText -ShotPath 'C:\Shots\$env.png' -Cli plain | Should -Be ''
+        Get-HotshotTypedText -ShotPath 'C:\Shots\`x`.png' -Cli plain | Should -Be ''
+        Get-HotshotTypedText -ShotPath 'C:\My Shots\a`nb.png' -Cli plain | Should -Be ''
     }
 }
 

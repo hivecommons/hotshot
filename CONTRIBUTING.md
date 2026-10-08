@@ -39,6 +39,10 @@ Notes:
 - The Pester suite (`windows/tests/hotshot-capture.tests.ps1`) exercises the Windows capture script logic — including the capture orchestration (clipboard wait loop, multi-format clipboard, typed-injection fallbacks) via injectable scriptblock collaborators, so no Snipping Tool, clipboard, or foreground window is needed — and runs on `windows-latest` in CI; it's independent of the PSScriptAnalyzer lint check above. `windows/tests/hotshot-capture.e2e.tests.ps1` runs the real `hotshot-capture.ps1` in a child `pwsh` against a recording stub of `HotshotCapture.psm1` to check the script's own wiring (parameter defaults, step order, failure exits); like `install.tests.ps1` it needs Windows because the script loads WinForms and `System.Drawing`.
 - If you cannot run a platform-specific check locally, say so in the PR and describe the manual validation you did run.
 
+## Runbooks
+
+The [`runbooks/`](runbooks/) directory holds [injection-failure.md](runbooks/injection-failure.md) (triage for "nothing lands in the terminal"), [release-rollback.md](runbooks/release-rollback.md), and [postmortem-template.md](runbooks/postmortem-template.md) for regressions that reached users.
+
 ## Coding guidelines
 
 - Preserve README behavior parity across macOS, Linux, and Windows when changing path injection or CLI detection.

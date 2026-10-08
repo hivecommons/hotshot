@@ -177,9 +177,13 @@ Describe 'Get-HotshotTypedText' {
         }
     }
 
-    It 'still returns the plain form for paths with shell metacharacters' {
-        Get-HotshotTypedText -ShotPath 'C:\Shots\a&calc.png' -Cli plain | Should -Be 'C:\Shots\a&calc.png '
+    It 'double-quotes the plain form for paths with shell metacharacters' {
+        Get-HotshotTypedText -ShotPath 'C:\Shots\a&calc.png' -Cli plain | Should -Be '"C:\Shots\a&calc.png" '
         Get-HotshotTypedText -ShotPath 'C:\My Shots\a&b.png' -Cli plain | Should -Be '"C:\My Shots\a&b.png" '
+    }
+
+    It 'refuses the plain form for paths containing a literal double quote' {
+        Get-HotshotTypedText -ShotPath 'C:\Shots\a"&calc.png' -Cli plain | Should -Be ''
     }
 }
 

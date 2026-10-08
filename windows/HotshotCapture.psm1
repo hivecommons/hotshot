@@ -41,6 +41,14 @@ function Get-TargetCli {
     if ($sawPlain) { return 'plain' } else { return 'unknown' }
 }
 
+# Parity with macOS SHELL_COMMAND_METACHARACTERS and linux has_shell_metachars.
+function Test-HotshotShellMetacharacters {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string]$Path)
+
+    return ($Path -match '[$`;|&<>!]')
+}
+
 function Get-HotshotTypedText {
     [CmdletBinding()]
     param(
@@ -59,7 +67,13 @@ function Get-HotshotTypedText {
             if ($ShotPath -match '[\s]') { return '"' + $ShotPath + '" ' }
             return $ShotPath + ' '
         }
-        default { return "[$ShotPath] " }
+        default {
+            # The bracketed form is typed verbatim into an unknown shell, so it
+            # is refused for shell command metacharacters (the plain form is
+            # double-quoted and stays allowed, as on macOS/Linux).
+            if (Test-HotshotShellMetacharacters -Path $ShotPath) { return '' }
+            return "[$ShotPath] "
+        }
     }
 }
 
@@ -202,7 +216,11 @@ function Invoke-HotshotInjection {
     $verboseLogging = Get-HotshotVerboseLogging
     if ($NoType) { return }
     if (-not $Text) {
-        Write-Warning (Format-HotshotDiagnostic -Severity WARN -Event 'injection.control_chars_refused' `
+        $refusal = 'injection.control_chars_refused'
+        if ($ShotPath -notmatch '[\x00-\x1F\x7F\u2028\u2029]' -and (Test-HotshotShellMetacharacters -Path $ShotPath)) {
+            $refusal = 'injection.shell_metachars_refused'
+        }
+        Write-Warning (Format-HotshotDiagnostic -Severity WARN -Event $refusal `
                 -Detail "path=$(Get-RedactedPath -Path $ShotPath -VerboseLogging $verboseLogging)")
     } elseif ($TerminalHandle -ne [IntPtr]::Zero) {
         $refocused = & $SetForeground $TerminalHandle

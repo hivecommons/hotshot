@@ -224,7 +224,8 @@ function Invoke-HotshotInjection {
     if ($NoType) { return }
     if (-not $Text) {
         $refusal = 'injection.control_chars_refused'
-        if ($ShotPath -notmatch '[\x00-\x1F\x7F\u2028\u2029]' -and (Test-HotshotShellMetacharacters -Path $ShotPath)) {
+        if ($ShotPath -notmatch '[\x00-\x1F\x7F\u2028\u2029]' -and
+            ((Test-HotshotShellMetacharacters -Path $ShotPath) -or $ShotPath -match '"')) {
             $refusal = 'injection.shell_metachars_refused'
         }
         Write-Warning (Format-HotshotDiagnostic -Severity WARN -Event $refusal `

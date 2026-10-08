@@ -24,7 +24,7 @@ All platforms honor the same contract:
 | Clipboard: file URL / drop list | ✅ file URL | with CopyQ | ✅ file drop list |
 | CLI detection (focused terminal's processes) | `ps -t <tty>` | `/proc` descendants | Win32_Process tree |
 | Claude Code → typed `[path] ` | ✅ | ✅ | ✅ |
-| Copilot CLI / aider / OpenCode → bare escaped path | ✅ backslash-escaped | ✅ backslash-escaped | quoted if spaces |
+| Copilot CLI / aider / OpenCode → bare escaped path | ✅ backslash-escaped | ✅ backslash-escaped | double-quoted if it contains spaces or shell metacharacters; refused if it contains `"`, `$` or `` ` `` |
 | Unknown CLI → bracketed default | ✅ | ✅ | ✅ |
 
 The rest of this page documents the **macOS** app.

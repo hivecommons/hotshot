@@ -448,6 +448,24 @@ Describe 'Invoke-HotshotInjection' {
         "$w" | Should -Be 'hotshot [WARN] injection.shell_metachars_refused: path=<redacted>'
     }
 
+    It 'warns injection.shell_metachars_refused (not control_chars) for a plain-form path refused for a literal quote' {
+        $fakes = $script:Fakes
+        Invoke-HotshotInjection -Text '' -TerminalHandle $script:Hwnd -ShotPath 'C:\Shots\a"b.png' `
+            @fakes -WarningVariable w -WarningAction SilentlyContinue
+
+        $script:Calls.Count | Should -Be 0
+        "$w" | Should -Be 'hotshot [WARN] injection.shell_metachars_refused: path=<redacted>'
+    }
+
+    It 'labels the $ and backtick plain-form refusals as shell_metachars_refused' {
+        $fakes = $script:Fakes
+        foreach ($path in @('C:\Shots\$(id).png', 'C:\Shots\`x`.png')) {
+            Invoke-HotshotInjection -Text '' -TerminalHandle $script:Hwnd -ShotPath $path `
+                @fakes -WarningVariable w -WarningAction SilentlyContinue
+            "$w" | Should -Be 'hotshot [WARN] injection.shell_metachars_refused: path=<redacted>'
+        }
+    }
+
     It 'reveals the path in the control_chars_refused warning when verbose logging is on' {
         $fakes = $script:Fakes
         $env:HOTSHOT_VERBOSE_LOGGING = '1'

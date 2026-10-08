@@ -79,6 +79,8 @@ scripts/bundle.sh --install  # also stops any running hotshot, copies the app to
 
 The script runs `swift build -c release`, so the same requirements as above apply.
 
+To go back to an earlier build after a bad update, see [runbooks/release-rollback.md](runbooks/release-rollback.md).
+
 ### First-time setup
 
 macOS will ask for Accessibility permission the first time — this lets hotshot type the path into your terminal. Grant it in System Settings > Privacy & Security. You only have to do this once.
@@ -139,7 +141,7 @@ Any CLI tool that accepts image file paths as input:
 No — it works *with* them. Your normal ⌘⇧3/4/5 shortcuts work exactly as before (file mode). And ⌃⌘⇧3/4 clipboard shortcuts work with clipboard mode. hotshot watches for the results and injects automatically.
 
 **I took a screenshot and nothing appeared in my terminal.**
-Make sure hotshot is running (look for the camera icon in your menu bar). Also make sure you've clicked on a terminal window at least once since launching hotshot — it needs to know which terminal to target.
+Make sure hotshot is running (look for the camera icon in your menu bar). Also make sure you've clicked on a terminal window at least once since launching hotshot — it needs to know which terminal to target. If it still doesn't work, follow [runbooks/injection-failure.md](runbooks/injection-failure.md), which maps hotshot's diagnostic events to causes.
 
 **Where do the screenshots go?**
 By default, wherever your Mac saves screenshots (usually Desktop or Downloads). hotshot reads your macOS screenshot location setting automatically. You can override it from the menu bar > "Change screenshot folder..."

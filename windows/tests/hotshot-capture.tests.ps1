@@ -168,6 +168,19 @@ Describe 'Get-HotshotTypedText' {
             Get-HotshotTypedText -ShotPath ("C:\Shots\evil" + [char]0x2029 + "\one.png") -Cli $cli | Should -Be ''
         }
     }
+
+    It 'refuses the bracketed form for shell metacharacters (macOS/Linux parity)' {
+        foreach ($path in @('C:\Shots\a&calc.png', 'C:\Shots\$(id).png', 'C:\Shots\a;id.png', 'C:\Shots\`x`.png',
+                'C:\Shots\a|b.png', 'C:\Shots\a!b.png', 'C:\Shots\a<b.png', 'C:\Shots\a>b.png')) {
+            Get-HotshotTypedText -ShotPath $path -Cli claude | Should -Be ''
+            Get-HotshotTypedText -ShotPath $path -Cli unknown | Should -Be ''
+        }
+    }
+
+    It 'still returns the plain form for paths with shell metacharacters' {
+        Get-HotshotTypedText -ShotPath 'C:\Shots\a&calc.png' -Cli plain | Should -Be 'C:\Shots\a&calc.png '
+        Get-HotshotTypedText -ShotPath 'C:\My Shots\a&b.png' -Cli plain | Should -Be '"C:\My Shots\a&b.png" '
+    }
 }
 
 Describe 'ConvertTo-SendKeysEscaped' {
@@ -409,6 +422,15 @@ Describe 'Invoke-HotshotInjection' {
 
         $script:Calls.Count | Should -Be 0
         "$w" | Should -Be 'hotshot [WARN] injection.control_chars_refused: path=<redacted>'
+    }
+
+    It 'warns injection.shell_metachars_refused and does not send keys for a metacharacter path' {
+        $fakes = $script:Fakes
+        Invoke-HotshotInjection -Text '' -TerminalHandle $script:Hwnd -ShotPath 'C:\Shots\a&calc.png' `
+            @fakes -WarningVariable w -WarningAction SilentlyContinue
+
+        $script:Calls.Count | Should -Be 0
+        "$w" | Should -Be 'hotshot [WARN] injection.shell_metachars_refused: path=<redacted>'
     }
 
     It 'reveals the path in the control_chars_refused warning when verbose logging is on' {

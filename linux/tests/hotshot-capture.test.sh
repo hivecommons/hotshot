@@ -360,6 +360,38 @@ check "e2e metachar dir: refusal warning printed" $?
 grep -q -- "-t image/png -i $out" "$CLIPLOG"
 check "e2e metachar dir: clipboard still loaded" $?
 
+# No HOTSHOT_DIR / --dir -> SHOT_DIR resolves through xdg-user-dir (issue #174).
+# run_e2e always pins HOTSHOT_DIR, so these runs set the environment directly;
+# the stub sits ahead of the capture stubs so the lookup never depends on
+# whether the host has xdg-user-dirs installed.
+XDGE2E="$TMP/xdge2e"
+mkdir -p "$XDGE2E"
+cp "$STUBS/maim" "$STUBS/xclip" "$STUBS/xdotool" "$XDGE2E/"
+cat >"$XDGE2E/xdg-user-dir" <<EOF
+#!/usr/bin/env bash
+[ "\$1" = "PICTURES" ] && echo "$TMP/Bilder"
+EOF
+chmod +x "$XDGE2E"/*
+root="$(spawn_tree claude)"
+rm -f "$TYPELOG" "$CLIPLOG"
+shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" DISPLAY=:99 PATH="$XDGE2E:/usr/bin:/bin" \
+    HOTSHOT_TEST_FOCUS_PID="$root" bash "$SCRIPT" --full 2>"$TMP/e2e-xdg.err")"
+rc=$?
+assert_eq "e2e xdg-user-dir: exit 0" "0" "$rc"
+case "$shot" in "$TMP/Bilder/hotshot/"*.png) check "e2e xdg-user-dir: shot saved under <xdg-user-dir PICTURES>/hotshot" 0 ;; *) check "e2e xdg-user-dir: shot saved under <xdg-user-dir PICTURES>/hotshot ($shot)" 1 ;; esac
+if [ -s "$shot" ]; then check "e2e xdg-user-dir: screenshot file created" 0; else check "e2e xdg-user-dir: screenshot file created" 1; fi
+assert_eq "e2e xdg-user-dir: typed bracketed path" "[$shot] " "$(cat "$TYPELOG")"
+
+# Exported XDG_PICTURES_DIR wins over xdg-user-dir.
+root="$(spawn_tree claude)"
+rm -f "$TYPELOG" "$CLIPLOG"
+shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" DISPLAY=:99 PATH="$XDGE2E:/usr/bin:/bin" \
+    XDG_PICTURES_DIR="$TMP/pics" HOTSHOT_TEST_FOCUS_PID="$root" bash "$SCRIPT" --full 2>"$TMP/e2e-xdgenv.err")"
+rc=$?
+assert_eq "e2e XDG_PICTURES_DIR: exit 0" "0" "$rc"
+case "$shot" in "$TMP/pics/hotshot/"*.png) check "e2e XDG_PICTURES_DIR: exported dir wins over xdg-user-dir" 0 ;; *) check "e2e XDG_PICTURES_DIR: exported dir wins over xdg-user-dir ($shot)" 1 ;; esac
+if [ -s "$shot" ]; then check "e2e XDG_PICTURES_DIR: screenshot file created" 0; else check "e2e XDG_PICTURES_DIR: screenshot file created" 1; fi
+
 # Capture failure (maim dies) -> script dies, no typing.
 cat >"$STUBS/failmaim" <<'EOF'
 #!/usr/bin/env bash

@@ -262,6 +262,12 @@ has_shell_metachars() {
     return 1
 }
 
+# --- 3. injection safety checks (control chars before shell metachars) --------
+if [ "$DO_TYPE" = 1 ] && has_control_chars "$SHOT_PATH"; then
+    log_event WARN injection.control_chars_refused "screenshot saved"
+    DO_TYPE=0
+fi
+
 case "$CLI" in
     plain) TEXT="$(shell_escape "$SHOT_PATH") " ;;
     *)
@@ -274,10 +280,6 @@ case "$CLI" in
 esac
 
 # --- 4. typed injection ------------------------------------------------------
-if [ "$DO_TYPE" = 1 ] && has_control_chars "$SHOT_PATH"; then
-    log_event WARN injection.control_chars_refused "screenshot saved"
-    DO_TYPE=0
-fi
 if [ "$DO_TYPE" = 1 ]; then
     if [ "$SESSION" = "x11" ]; then
         if have xdotool; then

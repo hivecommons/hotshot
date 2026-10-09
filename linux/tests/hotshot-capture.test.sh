@@ -360,6 +360,22 @@ check "e2e metachar dir: refusal warning printed" $?
 grep -q -- "-t image/png -i $out" "$CLIPLOG"
 check "e2e metachar dir: clipboard still loaded" $?
 
+# Control-char + shell-metachar in the directory -> control char label takes priority.
+root="$(spawn_tree claude)"
+both_dir="$TMP/shots;rm
+dir"
+out="$(run_e2e "$root" --full --dir "$both_dir" 2>"$TMP/e2e-both.err")"
+rc=$?
+assert_eq "e2e both-char dir: exit 0" "0" "$rc"
+[ -s "$out" ]
+check "e2e both-char dir: screenshot still created" $?
+[ ! -e "$TYPELOG" ]
+check "e2e both-char dir: nothing typed" $?
+grep -q "injection.control_chars_refused" "$TMP/e2e-both.err"
+check "e2e both-char dir: control chars label used" $?
+! grep -q "injection.shell_metachars_refused" "$TMP/e2e-both.err"
+check "e2e both-char dir: shell metachars label not used" $?
+
 # No HOTSHOT_DIR / --dir -> SHOT_DIR resolves through xdg-user-dir (issue #174).
 # run_e2e always pins HOTSHOT_DIR, so these runs set the environment directly;
 # the stub sits ahead of the capture stubs so the lookup never depends on

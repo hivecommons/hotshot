@@ -7,7 +7,7 @@ built-in Snipping Tool overlay, and hotshot:
 
 1. Saves the PNG to `%USERPROFILE%\Pictures\hotshot\hotshot-YYYYMMDD-HHMMSS-mmm.png`
    (milliseconds, plus a `-N` suffix if the name is already taken; override
-   the folder with the `HOTSHOT_DIR` environment variable or `-Dir`)
+   the folder with the `HOTSHOT_DIR` environment variable or `-Dir`; relative paths and a leading `~` are resolved to an absolute path)
 2. Rewrites the clipboard with one multi-format entry: the **image**, the
    **plain-text path**, and a **file drop list** (the Explorer-copy
    equivalent of macOS' file URL) — so Ctrl-V works in Claude Code, GUI

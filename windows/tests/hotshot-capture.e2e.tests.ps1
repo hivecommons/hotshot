@@ -44,6 +44,11 @@ function Wait-HotshotClipboardImage {
     return $img
 }
 
+function Resolve-HotshotDirectory {
+    param([string]$Dir)
+    return $Dir
+}
+
 function Get-HotshotShotPath {
     param([string]$Dir)
     Write-StubCall 'Get-HotshotShotPath' @{ Dir = $Dir }
@@ -83,7 +88,7 @@ function Invoke-HotshotInjection {
     }
 }
 
-Export-ModuleMember -Function Wait-HotshotClipboardImage, Get-HotshotShotPath, `
+Export-ModuleMember -Function Wait-HotshotClipboardImage, Resolve-HotshotDirectory, Get-HotshotShotPath, `
     New-HotshotClipboardDataObject, Set-HotshotClipboardDataObject, Get-TargetCli, `
     Get-HotshotTypedText, Invoke-HotshotInjection
 '@

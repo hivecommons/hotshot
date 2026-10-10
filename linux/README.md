@@ -77,7 +77,7 @@ hotshot-capture [--region|--full] [--no-type] [--dir DIR]
 - `--region` (default): drag-select a region
 - `--full`: capture the whole screen
 - `--no-type`: skip the typed injection (clipboard + file only)
-- `--dir DIR`: save screenshots to DIR
+- `--dir DIR`: save screenshots to DIR (a relative path or leading `~` is resolved to an absolute path)
 
 ## Parity notes
 

@@ -50,6 +50,7 @@ $img = Wait-HotshotClipboardImage -SequenceBefore $seqBefore -Deadline (Get-Date
 if (-not $img) { Fail 'capture cancelled or timed out (no image appeared on the clipboard)' }
 
 # --- 2. save PNG + multi-format clipboard -------------------------------------
+$Dir = Resolve-HotshotDirectory -Dir $Dir
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 $shotPath = Get-HotshotShotPath -Dir $Dir
 $img.Save($shotPath, [System.Drawing.Imaging.ImageFormat]::Png)

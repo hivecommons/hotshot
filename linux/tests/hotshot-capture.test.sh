@@ -312,7 +312,7 @@ check "e2e claude: clipboard loaded via xclip image/png" $?
 root="$(spawn_tree claude)"
 shot="$(cd "$TMP" && run_e2e "$root" --full --dir rel-shots)"
 assert_eq "e2e relative --dir: typed path is absolute" "$TMP/rel-shots" "$(dirname "$shot")"
-shot="$(HOME="$TMP/fakehome" run_e2e "$root" --full --dir "~/tilde-shots")"
+shot="$(HOME="$TMP/fakehome" run_e2e "$root" --full --dir \~/tilde-shots)"
 assert_eq "e2e ~ --dir: typed path is rooted at HOME" "$TMP/fakehome/tilde-shots" "$(dirname "$shot")"
 
 # Focused terminal runs copilot -> escaped bare path typed.
@@ -1150,7 +1150,7 @@ assert_eq "e2e notify die: notification carries the die reason" \
 assert_eq "normalize_shot_dir: absolute unchanged" "/a/b" "$(normalize_shot_dir /a/b)"
 assert_eq "normalize_shot_dir: relative anchored to PWD" "$PWD/shots" "$(normalize_shot_dir shots)"
 assert_eq "normalize_shot_dir: bare ~ is HOME" "/home/u" "$(HOME=/home/u normalize_shot_dir '~')"
-assert_eq "normalize_shot_dir: ~/x is under HOME" "/home/u/x" "$(HOME=/home/u normalize_shot_dir '~/x')"
+assert_eq "normalize_shot_dir: ~/x is under HOME" "/home/u/x" "$(HOME=/home/u normalize_shot_dir \~/x)"
 
 # ==============================================================================
 echo

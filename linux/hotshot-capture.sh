@@ -38,7 +38,7 @@ default_pictures_dir() {
 normalize_shot_dir() {
     case "$1" in
         "~") printf '%s' "$HOME" ;;
-        "~/"*) printf '%s' "$HOME/${1#\~/}" ;;
+        \~/*) printf '%s' "$HOME/${1#\~/}" ;;
         /*) printf '%s' "$1" ;;
         *) printf '%s' "$PWD/$1" ;;
     esac

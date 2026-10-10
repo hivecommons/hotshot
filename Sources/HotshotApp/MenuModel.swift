@@ -1,7 +1,8 @@
 import Foundation
+import HotshotCore
 
-/// The menu actions the status-bar menu can trigger. The app delegate maps
-/// each case onto its `@objc` selector.
+/// The menu actions the status-bar menu can trigger. Each case names the
+/// `@objc` selector it dispatches to (see `selectorName`).
 public enum MenuAction: Equatable, CaseIterable {
     case toggleAutoFocus
     case toggleAutoReturn
@@ -12,6 +13,44 @@ public enum MenuAction: Equatable, CaseIterable {
     case injectClipboardNow
     case chooseScreenshotDir
     case quit
+
+    /// Objective-C selector name of the handler: an `@objc` method on the
+    /// app delegate, or `NSApplication.terminate(_:)` for `.quit`. Menu
+    /// items have no explicit target, so the action travels the responder
+    /// chain to whichever of the two implements it.
+    public var selectorName: String {
+        switch self {
+        case .toggleAutoFocus: return "toggleAutoFocus"
+        case .toggleAutoReturn: return "toggleAutoReturn"
+        case .toggleNotifications: return "toggleNotifications"
+        case .toggleAutoWatch: return "toggleAutoWatch"
+        case .toggleClipboardWatch: return "toggleClipboardWatch"
+        case .injectLastScreenshot: return "injectLastScreenshot"
+        case .injectClipboardNow: return "injectClipboardNow"
+        case .chooseScreenshotDir: return "chooseScreenshotDir"
+        case .quit: return "terminate:"
+        }
+    }
+}
+
+/// One of the five boolean preferences behind the menu checkmarks.
+public enum PrefKey: Equatable, CaseIterable {
+    case autoFocus
+    case autoReturn
+    case notifications
+    case autoWatch
+    case clipboardWatch
+
+    /// The `UserDefaults` key the pref is persisted under.
+    public var defaultsKey: String {
+        switch self {
+        case .autoFocus: return PREF_AUTO_FOCUS
+        case .autoReturn: return PREF_AUTO_RETURN
+        case .notifications: return PREF_NOTIFICATIONS
+        case .autoWatch: return PREF_AUTO_WATCH
+        case .clipboardWatch: return PREF_CLIPBOARD_WATCH
+        }
+    }
 }
 
 /// Snapshot of the five boolean `@UserDefault` preferences the menu shows
@@ -34,6 +73,19 @@ public struct MenuPrefs: Equatable {
     }
 }
 
+extension MenuPrefs {
+    /// The value of one pref.
+    public subscript(key: PrefKey) -> Bool {
+        switch key {
+        case .autoFocus: return autoFocus
+        case .autoReturn: return autoReturn
+        case .notifications: return notifications
+        case .autoWatch: return autoWatch
+        case .clipboardWatch: return clipboardWatch
+        }
+    }
+}
+
 /// The watcher side effect a preference toggle requires.
 public enum WatcherCommand: Equatable {
     case startScreenshots
@@ -42,11 +94,42 @@ public enum WatcherCommand: Equatable {
     case stopClipboard
 }
 
+/// The four watcher operations a `WatcherCommand` can trigger.
+public struct WatcherControls {
+    public let startScreenshots: () -> Void
+    public let stopScreenshots: () -> Void
+    public let startClipboard: () -> Void
+    public let stopClipboard: () -> Void
+
+    public init(
+        startScreenshots: @escaping () -> Void,
+        stopScreenshots: @escaping () -> Void,
+        startClipboard: @escaping () -> Void,
+        stopClipboard: @escaping () -> Void
+    ) {
+        self.startScreenshots = startScreenshots
+        self.stopScreenshots = stopScreenshots
+        self.startClipboard = startClipboard
+        self.stopClipboard = stopClipboard
+    }
+
+    /// Run the operation `command` names.
+    public func run(_ command: WatcherCommand) {
+        switch command {
+        case .startScreenshots: startScreenshots()
+        case .stopScreenshots: stopScreenshots()
+        case .startClipboard: startClipboard()
+        case .stopClipboard: stopClipboard()
+        }
+    }
+}
+
 /// Owns the status-bar menu decisions extracted from the app delegate:
 /// item order, titles, which pref drives each checkmark, the tag the target
-/// label is looked up by, and which watcher a toggle starts or stops. The
-/// delegate only maps these values onto `NSMenu`/`NSMenuItem` and the real
-/// watchers, so the test bundle covers every decision without AppKit.
+/// label is looked up by, which prefs a toggle persists and which watcher it
+/// starts or stops. `makeMenu` (MenuBuilder.swift) turns the items into an
+/// `NSMenu`; the delegate only installs it and wires the real watchers, so
+/// the test bundle covers every decision.
 public enum MenuModel {
     /// Tag of the "Target: …" item, used to find it again when the tracked
     /// terminal changes.
@@ -160,5 +243,30 @@ public enum MenuModel {
         case .injectLastScreenshot, .injectClipboardNow, .chooseScreenshotDir, .quit:
             return ToggleResult(prefs: prefs, command: nil)
         }
+    }
+
+    /// The prefs whose values differ between `current` and `next`, in
+    /// `PrefKey.allCases` order.
+    public static func changedPrefs(from current: MenuPrefs, to next: MenuPrefs) -> [PrefKey] {
+        PrefKey.allCases.filter { current[$0] != next[$0] }
+    }
+
+    /// Apply a toggle action: persist only the pref(s) `toggle` changed,
+    /// then run its watcher command, if any. Returns the new prefs.
+    @discardableResult
+    public static func applyToggle(
+        _ action: MenuAction,
+        prefs: MenuPrefs,
+        persist: (PrefKey, Bool) -> Void,
+        watchers: WatcherControls
+    ) -> MenuPrefs {
+        let result = toggle(action, prefs: prefs)
+        for key in changedPrefs(from: prefs, to: result.prefs) {
+            persist(key, result.prefs[key])
+        }
+        if let command = result.command {
+            watchers.run(command)
+        }
+        return result.prefs
     }
 }

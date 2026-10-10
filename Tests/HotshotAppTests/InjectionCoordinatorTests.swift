@@ -295,6 +295,23 @@ final class InjectionCoordinatorTests: XCTestCase {
         XCTAssertNil(seed(frontmost: nil, running: []))
     }
 
+    func testSeedSourceMapsToItsDiagnosticEvent() {
+        XCTAssertEqual(InjectionCoordinator.SeedSource.frontmost.diagnosticEvent, .targetSeeded)
+        XCTAssertEqual(InjectionCoordinator.SeedSource.running.diagnosticEvent, .targetFoundRunning)
+    }
+
+    func testSeedDetailRedactsNameUnlessVerbose() {
+        XCTAssertEqual(
+            InjectionCoordinator.seedDetail(logPrefix: "launch", name: "zsh", verbose: true),
+            "launch: zsh")
+        XCTAssertEqual(
+            InjectionCoordinator.seedDetail(logPrefix: "launch", name: "zsh", verbose: false),
+            "launch: \(redacted("zsh", verbose: false))")
+        XCTAssertEqual(
+            InjectionCoordinator.seedDetail(logPrefix: "menuWillOpen", name: nil, verbose: true),
+            "menuWillOpen: unknown")
+    }
+
     // MARK: - diagnosticDetail (diag)
 
     func testDiagnosticDetailRedactsPathAndScriptUnlessVerbose() {

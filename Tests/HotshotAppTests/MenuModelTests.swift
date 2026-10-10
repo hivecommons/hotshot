@@ -1,3 +1,4 @@
+import HotshotCore
 import XCTest
 
 @testable import HotshotApp
@@ -184,6 +185,134 @@ final class MenuModelTests: XCTestCase {
             XCTAssertEqual(
                 MenuModel.toggle(action, prefs: prefs),
                 MenuModel.ToggleResult(prefs: prefs, command: nil), "\(action)")
+        }
+    }
+
+    // MARK: - selectorName
+
+    func testSelectorNamesAreDistinct() {
+        let names = MenuAction.allCases.map(\.selectorName)
+        XCTAssertEqual(Set(names).count, MenuAction.allCases.count)
+    }
+
+    func testSelectorNamesMatchDelegateHandlers() {
+        XCTAssertEqual(
+            MenuAction.allCases.map(\.selectorName),
+            [
+                "toggleAutoFocus",
+                "toggleAutoReturn",
+                "toggleNotifications",
+                "toggleAutoWatch",
+                "toggleClipboardWatch",
+                "injectLastScreenshot",
+                "injectClipboardNow",
+                "chooseScreenshotDir",
+                "terminate:",
+            ])
+    }
+
+    // MARK: - PrefKey / MenuPrefs subscript
+
+    func testPrefKeysPersistUnderTheirUserDefaultKeys() {
+        XCTAssertEqual(
+            PrefKey.allCases.map(\.defaultsKey),
+            [PREF_AUTO_FOCUS, PREF_AUTO_RETURN, PREF_NOTIFICATIONS, PREF_AUTO_WATCH, PREF_CLIPBOARD_WATCH])
+        XCTAssertEqual(Set(PrefKey.allCases.map(\.defaultsKey)).count, PrefKey.allCases.count)
+    }
+
+    func testSubscriptReadsEachPref() {
+        for key in PrefKey.allCases {
+            var prefs = allOff
+            switch key {
+            case .autoFocus: prefs.autoFocus = true
+            case .autoReturn: prefs.autoReturn = true
+            case .notifications: prefs.notifications = true
+            case .autoWatch: prefs.autoWatch = true
+            case .clipboardWatch: prefs.clipboardWatch = true
+            }
+            XCTAssertEqual(PrefKey.allCases.filter { prefs[$0] }, [key])
+        }
+    }
+
+    // MARK: - changedPrefs
+
+    func testChangedPrefsIsEmptyForEqualPrefs() {
+        XCTAssertEqual(MenuModel.changedPrefs(from: allOff, to: allOff), [])
+    }
+
+    func testChangedPrefsListsEveryDifferenceInOrder() {
+        let allOn = MenuPrefs(
+            autoFocus: true, autoReturn: true, notifications: true, autoWatch: true,
+            clipboardWatch: true)
+        XCTAssertEqual(MenuModel.changedPrefs(from: allOff, to: allOn), PrefKey.allCases)
+        XCTAssertEqual(MenuModel.changedPrefs(from: allOn, to: allOff), PrefKey.allCases)
+    }
+
+    // MARK: - applyToggle
+
+    private var persisted: [(PrefKey, Bool)] = []
+    private var watcherCalls: [String] = []
+
+    private var watchers: WatcherControls {
+        WatcherControls(
+            startScreenshots: { [unowned self] in self.watcherCalls.append("startScreenshots") },
+            stopScreenshots: { [unowned self] in self.watcherCalls.append("stopScreenshots") },
+            startClipboard: { [unowned self] in self.watcherCalls.append("startClipboard") },
+            stopClipboard: { [unowned self] in self.watcherCalls.append("stopClipboard") })
+    }
+
+    private func apply(_ action: MenuAction, _ prefs: MenuPrefs) -> MenuPrefs {
+        persisted = []
+        watcherCalls = []
+        return MenuModel.applyToggle(
+            action, prefs: prefs, persist: { [unowned self] key, value in self.persisted.append((key, value)) },
+            watchers: watchers)
+    }
+
+    func testApplyTogglePersistsExactlyTheFlippedPref() {
+        let cases: [(MenuAction, PrefKey)] = [
+            (.toggleAutoFocus, .autoFocus),
+            (.toggleAutoReturn, .autoReturn),
+            (.toggleNotifications, .notifications),
+            (.toggleAutoWatch, .autoWatch),
+            (.toggleClipboardWatch, .clipboardWatch),
+        ]
+        for (action, key) in cases {
+            let next = apply(action, allOff)
+            XCTAssertEqual(persisted.map { $0.0 }, [key], "\(action)")
+            XCTAssertEqual(persisted.map { $0.1 }, [true], "\(action)")
+            XCTAssertEqual(next, MenuModel.toggle(action, prefs: allOff).prefs, "\(action)")
+        }
+    }
+
+    func testApplyToggleRunsOnlyTheWatchersCommand() {
+        _ = apply(.toggleAutoFocus, allOff)
+        XCTAssertEqual(watcherCalls, [])
+
+        _ = apply(.toggleAutoWatch, allOff)
+        XCTAssertEqual(watcherCalls, ["startScreenshots"])
+
+        var watching = allOff
+        watching.autoWatch = true
+        _ = apply(.toggleAutoWatch, watching)
+        XCTAssertEqual(watcherCalls, ["stopScreenshots"])
+        XCTAssertEqual(persisted.map { $0.0 }, [.autoWatch])
+        XCTAssertEqual(persisted.map { $0.1 }, [false])
+
+        _ = apply(.toggleClipboardWatch, allOff)
+        XCTAssertEqual(watcherCalls, ["startClipboard"])
+
+        var clipping = allOff
+        clipping.clipboardWatch = true
+        _ = apply(.toggleClipboardWatch, clipping)
+        XCTAssertEqual(watcherCalls, ["stopClipboard"])
+    }
+
+    func testApplyToggleIgnoresNonToggleActions() {
+        for action in [MenuAction.injectLastScreenshot, .injectClipboardNow, .chooseScreenshotDir, .quit] {
+            XCTAssertEqual(apply(action, allOff), allOff, "\(action)")
+            XCTAssertTrue(persisted.isEmpty, "\(action)")
+            XCTAssertEqual(watcherCalls, [], "\(action)")
         }
     }
 }

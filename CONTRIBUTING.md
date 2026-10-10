@@ -23,14 +23,20 @@ Requirements by platform:
 Run the checks that apply to your change before opening a PR:
 
 ```sh
-swift test
-bash linux/tests/hotshot-capture.test.sh
-bash linux/tests/install.test.sh
-bash scripts/tests/bundle.test.sh
-shellcheck -S warning linux/hotshot-capture.sh linux/install.sh linux/tests/hotshot-capture.test.sh linux/tests/install.test.sh scripts/bundle.sh scripts/tests/bundle.test.sh
+swift test --enable-code-coverage
+bash scripts/shell-coverage.sh
+shellcheck -S warning linux/hotshot-capture.sh linux/install.sh linux/tests/hotshot-capture.test.sh linux/tests/install.test.sh scripts/bundle.sh scripts/tests/bundle.test.sh scripts/shell-coverage.sh
 pwsh -NoProfile -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser; Invoke-ScriptAnalyzer -Path windows -Recurse -Severity Error"
 pwsh -NoProfile -Command "Install-Module Pester -Force -Scope CurrentUser; Invoke-Pester -Path windows/tests -CI"
 ```
+
+CI (`.github/workflows/ci.yml`) runs the same checks and additionally enforces coverage floors, so a change that passes its tests can still fail CI if it adds untested lines:
+
+- Swift: `HotshotCore` and `HotshotApp` must each stay at or above 95% line coverage (the `floors` dict in the *Swift build* job). Read the per-file figures from `llvm-cov report` as the CI job does, or from the `.profdata` that `swift test --enable-code-coverage` writes under `swift build --show-bin-path`/codecov.
+- Shell: `scripts/shell-coverage.sh` runs `linux/tests/hotshot-capture.test.sh`, `linux/tests/install.test.sh` and `scripts/tests/bundle.test.sh` under xtrace and requires 95% line coverage of `linux/hotshot-capture.sh`, `linux/install.sh` and `scripts/bundle.sh`. Each suite can still be run on its own with `bash <suite>`; override a floor while iterating with `HOTSHOT_FLOOR_CAPTURE`, `HOTSHOT_FLOOR_INSTALL` or `HOTSHOT_FLOOR_BUNDLE`.
+- PowerShell: the Pester job measures `windows/HotshotCapture.psm1` with an 88% coverage target (`CodeCoverage.CoveragePercentTarget` in the *Pester* job). `install.ps1` and `hotshot-capture.ps1` run in a child `pwsh`, so their suites exercise them without contributing to that figure.
+
+The floors sit a few points under what `main` measures; when your PR lifts coverage, raise them in the same PR.
 
 Notes:
 

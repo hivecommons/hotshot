@@ -314,6 +314,9 @@ shot="$(cd "$TMP" && run_e2e "$root" --full --dir rel-shots)"
 assert_eq "e2e relative --dir: typed path is absolute" "$TMP/rel-shots" "$(dirname "$shot")"
 shot="$(HOME="$TMP/fakehome" run_e2e "$root" --full --dir \~/tilde-shots)"
 assert_eq "e2e ~ --dir: typed path is rooted at HOME" "$TMP/fakehome/tilde-shots" "$(dirname "$shot")"
+shot="$(HOME="$TMP/barehome" run_e2e "$root" --full --dir \~)"
+assert_eq "e2e bare ~ --dir: shot saved directly under HOME" "$TMP/barehome" "$(dirname "$shot")"
+assert_eq "e2e bare ~ --dir: typed path is rooted at HOME" "[$shot] " "$(cat "$TYPELOG")"
 
 # Focused terminal runs copilot -> escaped bare path typed.
 root="$(spawn_tree copilot)"

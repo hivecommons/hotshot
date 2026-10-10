@@ -157,16 +157,10 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 isTerminated: { $0.isTerminated })
         else { return }
         setTarget(seed.app)
-        switch seed.source {
-        case .frontmost:
-            diag(
-                DiagnosticEvent.targetSeeded.rawValue,
-                detail: "\(logPrefix): \(redacted(targetTracker.name ?? "unknown", verbose: verboseDiagnostics))")
-        case .running:
-            diag(
-                DiagnosticEvent.targetFoundRunning.rawValue,
-                detail: "\(logPrefix): \(redacted(targetTracker.name ?? "unknown", verbose: verboseDiagnostics))")
-        }
+        diag(
+            seed.source.diagnosticEvent.rawValue,
+            detail: InjectionCoordinator.seedDetail(
+                logPrefix: logPrefix, name: targetTracker.name, verbose: verboseDiagnostics))
     }
 
     func windowTitle(pid: pid_t) -> String? {
@@ -218,44 +212,22 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.toolTip = "Hotshot \u{2014} screenshot \u{2192} terminal"
         }
 
+        for action in MenuAction.allCases {
+            let selector = Selector(action.selectorName)
+            assert(
+                responds(to: selector) || NSApplication.shared.responds(to: selector),
+                "no handler for menu action \(action)")
+        }
+
         rebuildMenu()
     }
 
     func rebuildMenu() {
-        let menu = NSMenu()
-        for item in MenuModel.items(prefs: menuPrefs, screenshotDir: screenshotDir) {
-            if item.isSeparator {
-                menu.addItem(NSMenuItem.separator())
-                continue
-            }
-            let menuItem = NSMenuItem(
-                title: item.title, action: item.action.map { self.selector(for: $0) },
-                keyEquivalent: item.keyEquivalent)
-            menuItem.tag = item.tag
-            menuItem.isEnabled = item.isEnabled
-            if let isOn = item.isOn {
-                menuItem.state = isOn ? .on : .off
-            }
-            menu.addItem(menuItem)
-        }
-
+        let menu = MenuModel.makeMenu(
+            items: MenuModel.items(prefs: menuPrefs, screenshotDir: screenshotDir))
         menu.delegate = self
         statusItem.menu = menu
         updateTargetLabel()
-    }
-
-    func selector(for action: MenuAction) -> Selector {
-        switch action {
-        case .toggleAutoFocus: return #selector(toggleAutoFocus)
-        case .toggleAutoReturn: return #selector(toggleAutoReturn)
-        case .toggleNotifications: return #selector(toggleNotifications)
-        case .toggleAutoWatch: return #selector(toggleAutoWatch)
-        case .toggleClipboardWatch: return #selector(toggleClipboardWatch)
-        case .injectLastScreenshot: return #selector(injectLastScreenshot)
-        case .injectClipboardNow: return #selector(injectClipboardNow)
-        case .chooseScreenshotDir: return #selector(chooseScreenshotDir)
-        case .quit: return #selector(NSApplication.terminate(_:))
-        }
     }
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -272,24 +244,22 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func toggleClipboardWatch() { applyToggle(.toggleClipboardWatch) }
 
-    /// Persist only the pref `MenuModel.toggle` flipped, run its watcher
+    lazy var watcherControls: WatcherControls = {
+        WatcherControls(
+            startScreenshots: { [unowned self] in self.startWatchingScreenshots() },
+            stopScreenshots: { [unowned self] in self.stopWatchingScreenshots() },
+            startClipboard: { [unowned self] in self.startWatchingClipboard() },
+            stopClipboard: { [unowned self] in self.stopWatchingClipboard() })
+    }()
+
+    /// Persist only the pref `MenuModel.toggle` flipped (under the same
+    /// `UserDefaults` key its `@UserDefault` property reads), run its watcher
     /// command, then rebuild the menu.
     func applyToggle(_ action: MenuAction) {
-        let current = menuPrefs
-        let result = MenuModel.toggle(action, prefs: current)
-        let next = result.prefs
-        if next.autoFocus != current.autoFocus { autoFocus = next.autoFocus }
-        if next.autoReturn != current.autoReturn { autoReturn = next.autoReturn }
-        if next.notifications != current.notifications { notifications = next.notifications }
-        if next.autoWatch != current.autoWatch { autoWatch = next.autoWatch }
-        if next.clipboardWatch != current.clipboardWatch { clipboardWatch = next.clipboardWatch }
-        switch result.command {
-        case .startScreenshots?: startWatchingScreenshots()
-        case .stopScreenshots?: stopWatchingScreenshots()
-        case .startClipboard?: startWatchingClipboard()
-        case .stopClipboard?: stopWatchingClipboard()
-        case nil: break
-        }
+        MenuModel.applyToggle(
+            action, prefs: menuPrefs,
+            persist: { key, value in UserDefaults.standard.set(value, forKey: key.defaultsKey) },
+            watchers: watcherControls)
         rebuildMenu()
     }
 

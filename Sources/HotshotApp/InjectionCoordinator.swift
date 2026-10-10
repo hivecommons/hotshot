@@ -232,6 +232,20 @@ public final class InjectionCoordinator {
     public enum SeedSource: Equatable {
         case frontmost
         case running
+
+        /// The diagnostic logged when a target is seeded from this source.
+        public var diagnosticEvent: DiagnosticEvent {
+            switch self {
+            case .frontmost: return .targetSeeded
+            case .running: return .targetFoundRunning
+            }
+        }
+    }
+
+    /// Detail for the seed diagnostic: `"<logPrefix>: <name>"`, with the
+    /// terminal name redacted unless `verbose` and "unknown" when nil.
+    public static func seedDetail(logPrefix: String, name: String?, verbose: Bool) -> String {
+        "\(logPrefix): \(redacted(name ?? "unknown", verbose: verbose))"
     }
 
     /// Pick the app to seed the tracked terminal from: the frontmost app if

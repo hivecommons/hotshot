@@ -33,6 +33,17 @@ default_pictures_dir() {
     fi
 }
 
+# The typed path is read by a terminal whose cwd differs from this launcher's,
+# so expand a leading ~ and anchor relative paths (parity with the macOS app).
+normalize_shot_dir() {
+    case "$1" in
+        "~") printf '%s' "$HOME" ;;
+        "~/"*) printf '%s' "$HOME/${1#\~/}" ;;
+        /*) printf '%s' "$1" ;;
+        *) printf '%s' "$PWD/$1" ;;
+    esac
+}
+
 SHOT_DIR="${HOTSHOT_DIR:-$(default_pictures_dir)/hotshot}"
 
 while [ $# -gt 0 ]; do
@@ -122,6 +133,7 @@ unique_shot_path() { # $1 = directory, $2 = timestamp; echoes a path that does n
     printf '%s' "$path"
 }
 
+SHOT_DIR="$(normalize_shot_dir "$SHOT_DIR")"
 mkdir -p "$SHOT_DIR" || die "cannot create screenshot directory $(redact "$SHOT_DIR")"
 SHOT_PATH="$(unique_shot_path "$SHOT_DIR" "$(date +%Y%m%d-%H%M%S-%3N)")"
 

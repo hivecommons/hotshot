@@ -323,6 +323,22 @@ Describe 'Wait-HotshotClipboardImage' {
     }
 }
 
+Describe 'Resolve-HotshotDirectory' {
+    It 'anchors a relative directory to the current location' {
+        Resolve-HotshotDirectory -Dir 'shots' | Should -Be ([System.IO.Path]::Combine((Get-Location).ProviderPath, 'shots'))
+    }
+
+    It 'expands a leading ~ to the home directory' {
+        Resolve-HotshotDirectory -Dir '~' | Should -Be ([System.IO.Path]::GetFullPath($HOME))
+        Resolve-HotshotDirectory -Dir '~/shots' | Should -Be ([System.IO.Path]::GetFullPath((Join-Path $HOME 'shots')))
+    }
+
+    It 'leaves an absolute directory unchanged' {
+        $abs = Join-Path $TestDrive 'abs'
+        Resolve-HotshotDirectory -Dir $abs | Should -Be ([System.IO.Path]::GetFullPath($abs))
+    }
+}
+
 Describe 'Get-HotshotShotPath' {
     It 'names the PNG hotshot-yyyyMMdd-HHmmss-fff.png inside the target directory' {
         $path = Get-HotshotShotPath -Dir (Join-Path 'C:' 'Shots') -Timestamp ([datetime]'2026-03-04T05:06:07.123') `

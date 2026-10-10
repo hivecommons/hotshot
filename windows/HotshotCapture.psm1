@@ -153,6 +153,20 @@ function Wait-HotshotClipboardImage {
     return $null
 }
 
+function Resolve-HotshotDirectory {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string]$Dir)
+    # The typed path is read by a terminal whose cwd differs from the shortcut's
+    # WorkingDirectory, so expand a leading ~ and anchor relative paths.
+    if ($Dir -eq '~' -or $Dir -match '^~[\\/]') {
+        $Dir = $HOME + $Dir.Substring(1)
+    }
+    if (-not [System.IO.Path]::IsPathRooted($Dir)) {
+        $Dir = Join-Path (Get-Location).ProviderPath $Dir
+    }
+    [System.IO.Path]::GetFullPath($Dir)
+}
+
 function Get-HotshotShotPath {
     [CmdletBinding()]
     param(
@@ -255,5 +269,5 @@ function Invoke-HotshotInjection {
 
 Export-ModuleMember -Function Get-TargetCli, Get-HotshotTypedText, ConvertTo-SendKeysEscaped, `
     Get-HotshotVerboseLogging, Get-RedactedPath, Format-HotshotDiagnostic, `
-    Wait-HotshotClipboardImage, Get-HotshotShotPath, New-HotshotClipboardDataObject, `
+    Wait-HotshotClipboardImage, Get-HotshotShotPath, Resolve-HotshotDirectory, New-HotshotClipboardDataObject, `
     Set-HotshotClipboardDataObject, Invoke-HotshotInjection

@@ -56,6 +56,7 @@ eval "$(extract_fn shell_escape)"
 eval "$(extract_fn has_control_chars)"
 eval "$(extract_fn has_shell_metachars)"
 eval "$(extract_fn default_pictures_dir)"
+eval "$(extract_fn normalize_shot_dir)"
 eval "$(extract_fn descendants)"
 eval "$(extract_fn classify_cli)"
 eval "$(extract_fn log_event)"
@@ -306,6 +307,13 @@ check "e2e claude: screenshot file created and echoed" $?
 assert_eq "e2e claude: typed bracketed path" "[$shot] " "$(cat "$TYPELOG")"
 grep -q -- "-t image/png -i $shot" "$CLIPLOG"
 check "e2e claude: clipboard loaded via xclip image/png" $?
+
+# Relative / ~ directories are typed as absolute paths (issue #190).
+root="$(spawn_tree claude)"
+shot="$(cd "$TMP" && run_e2e "$root" --full --dir rel-shots)"
+assert_eq "e2e relative --dir: typed path is absolute" "$TMP/rel-shots" "$(dirname "$shot")"
+shot="$(HOME="$TMP/fakehome" run_e2e "$root" --full --dir "~/tilde-shots")"
+assert_eq "e2e ~ --dir: typed path is rooted at HOME" "$TMP/fakehome/tilde-shots" "$(dirname "$shot")"
 
 # Focused terminal runs copilot -> escaped bare path typed.
 root="$(spawn_tree copilot)"
@@ -1137,6 +1145,12 @@ rc=$?
 assert_eq "e2e notify die: exit 1" "1" "$rc"
 assert_eq "e2e notify die: notification carries the die reason" \
     "hotshot capture cancelled or maim failed" "$(cat "$NOTIFYLOG")"
+
+# normalize_shot_dir
+assert_eq "normalize_shot_dir: absolute unchanged" "/a/b" "$(normalize_shot_dir /a/b)"
+assert_eq "normalize_shot_dir: relative anchored to PWD" "$PWD/shots" "$(normalize_shot_dir shots)"
+assert_eq "normalize_shot_dir: bare ~ is HOME" "/home/u" "$(HOME=/home/u normalize_shot_dir '~')"
+assert_eq "normalize_shot_dir: ~/x is under HOME" "/home/u/x" "$(HOME=/home/u normalize_shot_dir '~/x')"
 
 # ==============================================================================
 echo

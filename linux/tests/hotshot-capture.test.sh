@@ -658,6 +658,67 @@ check "e2e hyprland focus stolen: nothing typed" $?
 grep -q "hotshot \[WARN\] injection.focus_lost" "$TMP/hsteal.err"
 check "e2e hyprland focus stolen: focus_lost warning emitted" $?
 
+# IPC answered before the capture but fails afterwards (sway): the focus
+# check must fail closed like the X11 arm does when getactivewindow fails --
+# an unknown focused window is never typed into.
+IPCFAIL="$TMP/ipcfail"
+mkdir -p "$IPCFAIL"
+cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wl-copy" "$WSTUBS/wtype" "$IPCFAIL/"
+cat >"$IPCFAIL/swaymsg" <<EOF
+#!/usr/bin/env bash
+if [ -e "$STEALMARK" ]; then
+    echo "swaymsg: Unable to connect to sway" >&2
+    exit 1
+fi
+: >"$STEALMARK"
+printf '{"nodes":[{"focused":true,"pid":%s}]}\n' "\${HOTSHOT_TEST_FOCUS_PID:?}"
+EOF
+chmod +x "$IPCFAIL"/*
+root="$(spawn_tree claude)"
+rm -f "$TYPELOG" "$CLIPLOG" "$GRIMLOG" "$STEALMARK"
+shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+    PATH="$IPCFAIL:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
+    HOTSHOT_TEST_FOCUS_PID="$root" bash "$SCRIPT" --full 2>"$TMP/ipcfail.err")"
+rc=$?
+assert_eq "e2e wayland IPC fails after capture: exit 0" "0" "$rc"
+[ -s "$shot" ]
+check "e2e wayland IPC fails after capture: screenshot still saved" $?
+grep -q -- "--type image/png" "$CLIPLOG"
+check "e2e wayland IPC fails after capture: clipboard still loaded" $?
+[ ! -e "$TYPELOG" ]
+check "e2e wayland IPC fails after capture: nothing typed" $?
+grep -q "hotshot \[WARN\] injection.focus_lost" "$TMP/ipcfail.err"
+check "e2e wayland IPC fails after capture: focus_lost warning emitted" $?
+
+# Hyprland reports no active window after the capture (pid null, e.g. focus
+# moved to a layer-shell surface): same fail-closed contract.
+HYPRNULL="$TMP/hyprnull"
+mkdir -p "$HYPRNULL"
+cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wl-copy" "$WSTUBS/wtype" "$HYPRNULL/"
+cat >"$HYPRNULL/hyprctl" <<EOF
+#!/usr/bin/env bash
+if [ -e "$STEALMARK" ]; then
+    printf '{"pid":null}\n'
+else
+    : >"$STEALMARK"
+    printf '{"pid":%s}\n' "\${HOTSHOT_TEST_FOCUS_PID:?}"
+fi
+EOF
+chmod +x "$HYPRNULL"/*
+root="$(spawn_tree copilot)"
+rm -f "$TYPELOG" "$CLIPLOG" "$GRIMLOG" "$STEALMARK"
+shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=wayland-1 HYPRLAND_INSTANCE_SIGNATURE=test \
+    PATH="$HYPRNULL:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
+    HOTSHOT_TEST_FOCUS_PID="$root" bash "$SCRIPT" --full 2>"$TMP/hyprnull.err")"
+rc=$?
+assert_eq "e2e hyprland null focus after capture: exit 0" "0" "$rc"
+[ -s "$shot" ]
+check "e2e hyprland null focus after capture: screenshot still saved" $?
+[ ! -e "$TYPELOG" ]
+check "e2e hyprland null focus after capture: nothing typed" $?
+grep -q "hotshot \[WARN\] injection.focus_lost" "$TMP/hyprnull.err"
+check "e2e hyprland null focus after capture: focus_lost warning emitted" $?
+
 # No compositor IPC (neither SWAYSOCK nor HYPRLAND_INSTANCE_SIGNATURE): there
 # is no pre-capture pid to compare against, so the text is still typed.
 root="$(spawn_tree claude)"

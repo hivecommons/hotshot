@@ -595,6 +595,80 @@ rc=$?
 assert_eq "e2e hyprland copilot: exit 0" "0" "$rc"
 assert_eq "e2e hyprland copilot: typed escaped bare path" "$(shell_escape "$shot") " "$(cat "$TYPELOG")"
 
+# Focus stolen during the capture (sway): the post-capture IPC query reports a
+# different pid than the pre-capture one -> nothing is typed into the window
+# that took focus; the screenshot is still saved and on the clipboard.
+STEALSTUBS="$TMP/stealstubs"
+mkdir -p "$STEALSTUBS"
+cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wl-copy" "$WSTUBS/wtype" "$STEALSTUBS/"
+STEALMARK="$TMP/steal.called"
+cat >"$STEALSTUBS/swaymsg" <<EOF
+#!/usr/bin/env bash
+# First call (before the capture) reports the saved terminal; every later call
+# reports that some other window has focus.
+if [ -e "$STEALMARK" ]; then
+    printf '{"nodes":[{"focused":true,"pid":%s}]}\n' 99999
+else
+    : >"$STEALMARK"
+    printf '{"nodes":[{"focused":true,"pid":%s}]}\n' "\${HOTSHOT_TEST_FOCUS_PID:?}"
+fi
+EOF
+chmod +x "$STEALSTUBS"/*
+root="$(spawn_tree claude)"
+rm -f "$TYPELOG" "$CLIPLOG" "$GRIMLOG" "$STEALMARK"
+shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=wayland-1 SWAYSOCK="$TMP/sway.sock" \
+    PATH="$STEALSTUBS:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
+    HOTSHOT_TEST_FOCUS_PID="$root" bash "$SCRIPT" --full 2>"$TMP/wsteal.err")"
+rc=$?
+assert_eq "e2e wayland focus stolen: exit 0" "0" "$rc"
+[ -s "$shot" ]
+check "e2e wayland focus stolen: screenshot still saved" $?
+grep -q -- "--type image/png" "$CLIPLOG"
+check "e2e wayland focus stolen: clipboard still loaded" $?
+[ ! -e "$TYPELOG" ]
+check "e2e wayland focus stolen: nothing typed" $?
+grep -q "hotshot \[WARN\] injection.focus_lost" "$TMP/wsteal.err"
+check "e2e wayland focus stolen: focus_lost warning emitted" $?
+
+# Focus stolen during the capture (hyprland): same contract via hyprctl.
+HYPRSTEAL="$TMP/hyprsteal"
+mkdir -p "$HYPRSTEAL"
+cp "$WSTUBS/grim" "$WSTUBS/slurp" "$WSTUBS/wl-copy" "$WSTUBS/wtype" "$HYPRSTEAL/"
+cat >"$HYPRSTEAL/hyprctl" <<EOF
+#!/usr/bin/env bash
+if [ -e "$STEALMARK" ]; then
+    printf '{"pid":%s}\n' 99999
+else
+    : >"$STEALMARK"
+    printf '{"pid":%s}\n' "\${HOTSHOT_TEST_FOCUS_PID:?}"
+fi
+EOF
+chmod +x "$HYPRSTEAL"/*
+root="$(spawn_tree copilot)"
+rm -f "$TYPELOG" "$CLIPLOG" "$GRIMLOG" "$STEALMARK"
+shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=wayland-1 HYPRLAND_INSTANCE_SIGNATURE=test \
+    PATH="$HYPRSTEAL:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
+    HOTSHOT_TEST_FOCUS_PID="$root" bash "$SCRIPT" --full 2>"$TMP/hsteal.err")"
+rc=$?
+assert_eq "e2e hyprland focus stolen: exit 0" "0" "$rc"
+[ -s "$shot" ]
+check "e2e hyprland focus stolen: screenshot still saved" $?
+[ ! -e "$TYPELOG" ]
+check "e2e hyprland focus stolen: nothing typed" $?
+grep -q "hotshot \[WARN\] injection.focus_lost" "$TMP/hsteal.err"
+check "e2e hyprland focus stolen: focus_lost warning emitted" $?
+
+# No compositor IPC (neither SWAYSOCK nor HYPRLAND_INSTANCE_SIGNATURE): there
+# is no pre-capture pid to compare against, so the text is still typed.
+root="$(spawn_tree claude)"
+rm -f "$TYPELOG" "$CLIPLOG" "$GRIMLOG"
+shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=wayland-1 \
+    PATH="$WSTUBS:/usr/bin:/bin" HOTSHOT_DIR="$TMP/wshots" \
+    bash "$SCRIPT" --full)"
+rc=$?
+assert_eq "e2e wayland no IPC: exit 0" "0" "$rc"
+assert_eq "e2e wayland no IPC: typed bracketed default" "[$shot] " "$(cat "$TYPELOG")"
+
 # ==============================================================================
 # clipboard: copyq multi-format branch and degradation ladder
 # ==============================================================================

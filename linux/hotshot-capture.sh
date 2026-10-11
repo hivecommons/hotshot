@@ -103,6 +103,19 @@ else
 fi
 
 # --- 0. remember the focused terminal BEFORE the capture overlay ------------
+# Wayland has no portable "active window" query; sway and hyprland expose the
+# focused window's pid over their IPC. Echoes nothing on other compositors.
+wayland_focused_pid() {
+    local pid=""
+    if [ -n "${SWAYSOCK:-}" ] && have swaymsg && have jq; then
+        pid="$(swaymsg -t get_tree 2>/dev/null | jq -r '.. | select(.focused? == true) | .pid' | head -n1)"
+    elif [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && have hyprctl && have jq; then
+        pid="$(hyprctl activewindow -j 2>/dev/null | jq -r '.pid')"
+    fi
+    [ "$pid" = "null" ] && pid=""
+    printf '%s' "$pid"
+}
+
 FOCUS_WIN=""
 FOCUS_PID=""
 if [ "$SESSION" = "x11" ]; then
@@ -111,12 +124,7 @@ if [ "$SESSION" = "x11" ]; then
         [ -n "$FOCUS_WIN" ] && FOCUS_PID="$(xdotool getwindowpid "$FOCUS_WIN" 2>/dev/null || true)"
     fi
 else
-    if [ -n "${SWAYSOCK:-}" ] && have swaymsg && have jq; then
-        FOCUS_PID="$(swaymsg -t get_tree 2>/dev/null | jq -r '.. | select(.focused? == true) | .pid' | head -n1)"
-    elif [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && have hyprctl && have jq; then
-        FOCUS_PID="$(hyprctl activewindow -j 2>/dev/null | jq -r '.pid')"
-    fi
-    [ "$FOCUS_PID" = "null" ] && FOCUS_PID=""
+    FOCUS_PID="$(wayland_focused_pid)"
 fi
 
 # --- 1. capture --------------------------------------------------------------
@@ -309,9 +317,14 @@ if [ "$DO_TYPE" = 1 ]; then
             log_event WARN injection.tool_missing "install 'xdotool' for typed injection; path=$(redact "$SHOT_PATH")"
         fi
     else
-        # The compositor returns focus to the previously focused window when
-        # the slurp overlay closes, so type into whatever is focused now.
-        if have wtype; then
+        # The compositor normally returns focus to the previously focused
+        # window when the slurp overlay closes. Where the IPC exists
+        # (sway/hyprland) confirm that before typing: never type into a window
+        # that took focus during the selection. Without IPC there is nothing
+        # to compare against, so type into whatever is focused now.
+        if [ -n "$FOCUS_PID" ] && [ "$(wayland_focused_pid)" != "$FOCUS_PID" ]; then
+            log_event WARN injection.focus_lost "screenshot saved and on the clipboard"
+        elif have wtype; then
             wtype -d 15 -- "$TEXT" ||
                 log_event WARN injection.wtype_failed
         elif have ydotool; then

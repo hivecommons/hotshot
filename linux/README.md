@@ -93,8 +93,11 @@ hotshot-capture [--region|--full] [--no-type] [--dir DIR]
   On X11, if that window cannot be brought back to the front afterwards,
   nothing is typed (`injection.focus_lost`); the screenshot is still saved
   and on the clipboard. On Wayland, focused-window PID detection is implemented for sway and
-  hyprland; on other compositors CLI detection falls back to the bracketed
-  default (Claude-compatible).
+  hyprland, and the same check applies there: if a different window has
+  focus once the capture finishes, nothing is typed (`injection.focus_lost`).
+  On other compositors there is no focus query, so CLI detection falls back
+  to the bracketed default (Claude-compatible) and the path is typed into
+  the window the compositor returns focus to.
 - **No file watcher**: the hotkey performs capture + inject in one step, so
   there is nothing to watch. Your DE's native screenshot shortcuts are
   unaffected.

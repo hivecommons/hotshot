@@ -49,8 +49,12 @@ final class ScreenshotWatcherTests: XCTestCase {
 
     private func makeWatcher(directoryOverride: String? = nil) -> ScreenshotWatcher {
         let dir = directoryOverride ?? directory!
+        return makeWatcher(screenshotDirectory: { dir })
+    }
+
+    private func makeWatcher(screenshotDirectory: @escaping () -> String) -> ScreenshotWatcher {
         return ScreenshotWatcher(
-            screenshotDirectory: { dir },
+            screenshotDirectory: screenshotDirectory,
             verboseDiagnostics: { [weak self] in self?.verbose ?? false },
             diagnostic: { [weak self] event, severity, path, count in
                 self?.events.append(
@@ -59,8 +63,10 @@ final class ScreenshotWatcherTests: XCTestCase {
     }
 
     @discardableResult
-    private func writeFile(_ name: String, ageSeconds: TimeInterval = 0) throws -> String {
-        let path = (directory as NSString).appendingPathComponent(name)
+    private func writeFile(
+        _ name: String, ageSeconds: TimeInterval = 0, in dir: String? = nil
+    ) throws -> String {
+        let path = ((dir ?? directory) as NSString).appendingPathComponent(name)
         try Data([0x00]).write(to: URL(fileURLWithPath: path))
         if ageSeconds > 0 {
             try FileManager.default.setAttributes(
@@ -296,5 +302,67 @@ final class ScreenshotWatcherTests: XCTestCase {
         wait(for: [notFired], timeout: WATCH_DEBOUNCE_SECONDS + 0.5)
 
         XCTAssertNil(events.first { $0.event == "watcher.new_files" })
+    }
+
+    // MARK: - Folder rebind (#210)
+
+    /// `start()` re-reads `screenshotDirectory`, so calling it again after
+    /// the user picks a new folder must move the live kqueue watch there:
+    /// a screenshot written into the new folder is injected through the
+    /// real source and debounce timer, exactly as the app path relies on
+    /// after `MenuModel.applyScreenshotDirectoryChange`. Before #210 the
+    /// watch stayed bound to the old folder and never saw the new one.
+    func testRestartAfterFolderChangeWatchesTheNewFolder() throws {
+        let oldDir = directory!
+        let newDir = try makeDirectory().path
+        var current = oldDir
+        let watcher = makeWatcher(screenshotDirectory: { current })
+        let fired = expectation(description: "screenshot in the new folder is injected")
+        var injected: [String] = []
+        watcher.onNewScreenshot = {
+            injected.append($0)
+            fired.fulfill()
+        }
+
+        watcher.start()
+        current = newDir
+        watcher.start()
+        defer { watcher.stop() }
+
+        let fresh = try writeFile("Screenshot 2026-10-13 at 12.00.00.png", in: newDir)
+
+        wait(for: [fired], timeout: WATCH_DEBOUNCE_SECONDS + 5)
+
+        XCTAssertEqual(injected, [fresh])
+        XCTAssertEqual(
+            events.filter { $0.event == "watcher.started" }.map(\.path),
+            [oldDir, newDir],
+            "each start() binds to the folder current at that moment")
+    }
+
+    /// The second `start()` must also drop the old folder from the baseline
+    /// snapshot: a file that appears in the previous folder afterwards is
+    /// neither injected nor counted, only files in the new folder are.
+    func testRestartAfterFolderChangeIgnoresTheOldFolder() throws {
+        let oldDir = directory!
+        let newDir = try makeDirectory().path
+        var current = oldDir
+        let watcher = makeWatcher(screenshotDirectory: { current })
+        var injected: [String] = []
+        watcher.onNewScreenshot = { injected.append($0) }
+
+        watcher.start()
+        current = newDir
+        watcher.start()
+        defer { watcher.stop() }
+
+        try writeFile("stale-folder.png", in: oldDir)
+        watcher.checkForNewScreenshots()
+        XCTAssertEqual(injected, [], "a file in the old folder is not a new screenshot")
+        XCTAssertNil(events.first { $0.event == "watcher.new_files" })
+
+        let fresh = try writeFile("fresh.png", in: newDir)
+        watcher.checkForNewScreenshots()
+        XCTAssertEqual(injected, [fresh])
     }
 }

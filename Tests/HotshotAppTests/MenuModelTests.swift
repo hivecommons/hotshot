@@ -248,6 +248,20 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(MenuModel.changedPrefs(from: allOn, to: allOff), PrefKey.allCases)
     }
 
+    // MARK: - applyScreenshotDirectoryChange
+
+    func testDirectoryChangeRestartsScreenshotWatcherWhenAutoWatchOn() {
+        watcherCalls = []
+        MenuModel.applyScreenshotDirectoryChange(autoWatch: true, watchers: watchers)
+        XCTAssertEqual(watcherCalls, ["startScreenshots"])
+    }
+
+    func testDirectoryChangeDoesNothingWhenAutoWatchOff() {
+        watcherCalls = []
+        MenuModel.applyScreenshotDirectoryChange(autoWatch: false, watchers: watchers)
+        XCTAssertEqual(watcherCalls, [])
+    }
+
     // MARK: - applyToggle
 
     private var persisted: [(PrefKey, Bool)] = []

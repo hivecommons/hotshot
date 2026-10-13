@@ -269,4 +269,15 @@ public enum MenuModel {
         }
         return result.prefs
     }
+
+    /// Rebind the screenshot watcher to the newly chosen folder. `start()`
+    /// stops the old watch first; nothing runs when auto-watch is off.
+    public static func applyScreenshotDirectoryChange(
+        autoWatch: Bool,
+        watchers: WatcherControls
+    ) {
+        if autoWatch {
+            watchers.startScreenshots()
+        }
+    }
 }

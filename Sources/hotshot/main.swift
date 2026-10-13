@@ -302,6 +302,8 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if panel.runModal() == .OK, let url = panel.url {
             screenshotDir = url.path
+            MenuModel.applyScreenshotDirectoryChange(
+                autoWatch: autoWatch, watchers: watcherControls)
             rebuildMenu()
         }
     }

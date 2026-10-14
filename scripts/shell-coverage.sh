@@ -7,7 +7,7 @@
 # A line counts as covered when BASH_SOURCE:LINENO appears in the trace.
 #
 # Floors (percent) are overridable: HOTSHOT_FLOOR_CAPTURE, HOTSHOT_FLOOR_INSTALL,
-# HOTSHOT_FLOOR_BUNDLE.
+# HOTSHOT_FLOOR_BUNDLE, HOTSHOT_FLOOR_SMOKE.
 #
 # Usage: bash scripts/shell-coverage.sh
 set -euo pipefail
@@ -16,6 +16,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FLOOR_CAPTURE="${HOTSHOT_FLOOR_CAPTURE:-95}"
 FLOOR_INSTALL="${HOTSHOT_FLOOR_INSTALL:-95}"
 FLOOR_BUNDLE="${HOTSHOT_FLOOR_BUNDLE:-95}"
+FLOOR_SMOKE="${HOTSHOT_FLOOR_SMOKE:-95}"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -60,7 +61,7 @@ if [ "$got" != "$want" ]; then
     exit 1
 fi
 
-for suite in linux/tests/hotshot-capture.test.sh linux/tests/install.test.sh scripts/tests/bundle.test.sh; do
+for suite in linux/tests/hotshot-capture.test.sh linux/tests/install.test.sh scripts/tests/bundle.test.sh scripts/tests/smoke.test.sh; do
     echo "== $suite"
     bash "$ROOT/$suite"
 done
@@ -127,4 +128,5 @@ echo "== shell coverage"
 report linux/hotshot-capture.sh "$FLOOR_CAPTURE"
 report linux/install.sh "$FLOOR_INSTALL"
 report scripts/bundle.sh "$FLOOR_BUNDLE"
+report scripts/smoke.sh "$FLOOR_SMOKE"
 exit "$STATUS"

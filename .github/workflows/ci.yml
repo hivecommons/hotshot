@@ -95,6 +95,8 @@ jobs:
           test -x Hotshot.app/Contents/MacOS/hotshot
           test -f Hotshot.app/Contents/Resources/AppIcon.icns
           plutil -lint Hotshot.app/Contents/Info.plist
+      - name: Launch smoke (app delegate)
+        run: bash scripts/smoke.sh
 
   shellcheck:
     name: ShellCheck (Linux scripts)
@@ -103,7 +105,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: shellcheck
-        run: shellcheck -S warning linux/hotshot-capture.sh linux/install.sh linux/tests/hotshot-capture.test.sh linux/tests/install.test.sh scripts/bundle.sh scripts/tests/bundle.test.sh scripts/shell-coverage.sh
+        run: shellcheck -S warning linux/hotshot-capture.sh linux/install.sh linux/tests/hotshot-capture.test.sh linux/tests/install.test.sh scripts/bundle.sh scripts/tests/bundle.test.sh scripts/shell-coverage.sh scripts/smoke.sh scripts/tests/smoke.test.sh
 
   shell-tests:
     name: Linux capture tests

@@ -28,6 +28,17 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+# Anchor the prefix to an absolute path (same rules as hotshot-capture's
+# normalize_shot_dir) so the hotkey command and PATH check are launchable.
+case "$PREFIX" in
+    "~") PREFIX="$HOME" ;;
+    \~/*) PREFIX="$HOME/${PREFIX#\~/}" ;;
+    /*) : ;;
+    *) PREFIX="$PWD/$PREFIX" ;;
+esac
+PREFIX="${PREFIX%/}"
+[ -n "$PREFIX" ] || PREFIX="/"
+
 have() { command -v "$1" >/dev/null 2>&1; }
 
 mkdir -p "$PREFIX"

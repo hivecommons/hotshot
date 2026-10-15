@@ -213,6 +213,22 @@ if grep -q "custom-keybindings \[" "$GSLOG"; then check "gnome hotkey (already r
 grep -qF "binding <Ctrl><Shift>Print" "$GSLOG"
 check "gnome hotkey (already registered): binding still refreshed" $?
 
+# Relative and ~/ prefixes are registered as absolute paths.
+WORK="$TMP/work"
+mkdir -p "$WORK"
+rm -f "$GSLOG"
+(cd "$WORK" && env -i HOME="$FAKEHOME" PATH="$STUBS:$BASEPATH" bash "$INSTALLER" --prefix rel/bin --gnome-hotkey >/dev/null 2>&1)
+if [ -x "$WORK/rel/bin/hotshot-capture" ]; then check "relative prefix: installed under cwd" 0; else check "relative prefix: installed under cwd" 1; fi
+grep -qF "command $WORK/rel/bin/hotshot-capture" "$GSLOG"
+check "relative prefix: hotkey command is absolute" $?
+
+rm -f "$GSLOG"
+(cd "$WORK" && env -i HOME="$FAKEHOME" PATH="$STUBS:$BASEPATH" bash "$INSTALLER" --prefix '~/tools' --gnome-hotkey >/dev/null 2>&1)
+if [ -x "$FAKEHOME/tools/hotshot-capture" ]; then check "tilde prefix: installed under HOME" 0; else check "tilde prefix: installed under HOME" 1; fi
+grep -qF "command $FAKEHOME/tools/hotshot-capture" "$GSLOG"
+check "tilde prefix: hotkey command is absolute" $?
+if [ -e "$WORK/~" ]; then check "tilde prefix: no literal ~ directory" 1; else check "tilde prefix: no literal ~ directory" 0; fi
+
 # gsettings missing -> exit 1 with a clear message.
 out="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$MINBIN" \
     bash "$INSTALLER" --prefix "$PREFIX" --gnome-hotkey 2>&1)"

@@ -31,6 +31,8 @@ Diagnostics are stable event names and severities. Set `HOTSHOT_VERBOSE_LOGGING=
 | `clipboard.xclip_failed`, `clipboard.wl_copy_failed`, `clipboard.copyq_failed` (Linux) | Clipboard tool failed. | Verify `xclip` (X11) / `wl-clipboard` (Wayland) / CopyQ is installed and a display is reachable. |
 | Log line `no terminal tracked` | No terminal has been focused since hotshot started, so there is nowhere to inject. | Focus the target terminal once, then take the screenshot again. |
 | `cannot determine tty ... defaulting to bracketed format` | CLI detection failed; the path is typed in the bracketed default form. | Informational. If the wrong format is typed, see the platform README for the supported CLIs. |
+| `terminal.tty_unknown` (warn, macOS) | hotshot could not read the target terminal's tty over AppleScript, so it could not detect which CLI is running and typed the path in the bracketed default form. Usually a missing Automation permission, or a terminal that exposes no tty. | Informational. If the wrong format is typed, grant Automation access (System Settings > Privacy & Security > Automation) and relaunch; see the platform README for the supported CLIs. |
+| `screenshot.location_lookup_failed` (warn, macOS) | `defaults read com.apple.screencapture location` could not be run, so hotshot fell back to `~/Desktop`. Screenshots saved elsewhere will not be seen by the watcher. | Confirm `/usr/bin/defaults` is runnable, or set the screenshot location to `~/Desktop`, then restart hotshot. |
 
 If no event is logged at all, hotshot is probably not running: relaunch it and look for `app.launched`.
 

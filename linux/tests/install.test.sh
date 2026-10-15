@@ -223,6 +223,7 @@ grep -qF "command $WORK/rel/bin/hotshot-capture" "$GSLOG"
 check "relative prefix: hotkey command is absolute" $?
 
 rm -f "$GSLOG"
+# shellcheck disable=SC2088 # literal ~ is the input under test
 (cd "$WORK" && env -i HOME="$FAKEHOME" PATH="$STUBS:$BASEPATH" bash "$INSTALLER" --prefix '~/tools' --gnome-hotkey >/dev/null 2>&1)
 if [ -x "$FAKEHOME/tools/hotshot-capture" ]; then check "tilde prefix: installed under HOME" 0; else check "tilde prefix: installed under HOME" 1; fi
 grep -qF "command $FAKEHOME/tools/hotshot-capture" "$GSLOG"

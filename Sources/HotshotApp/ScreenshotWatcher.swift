@@ -14,6 +14,10 @@ public final class ScreenshotWatcher {
     private var source: DispatchSourceFileSystemObject?
     private var debounceTimer: DispatchSourceTimer?
     private var lastSeen: Set<String> = []
+    /// The folder the live fd and `lastSeen` baseline are bound to; nil when
+    /// not watching. `screenshotDirectory` can change underneath a running
+    /// watch (e.g. the macOS location default), so the diff must not re-read it.
+    private var watchedDirectory: String?
 
     /// Called with the full path of a new, injectable screenshot.
     public var onNewScreenshot: ((_ path: String) -> Void)?
@@ -64,6 +68,7 @@ public final class ScreenshotWatcher {
 
         source.resume()
         self.source = source
+        watchedDirectory = dir
         diagnostic("watcher.started", .info, dir, nil)
     }
 
@@ -72,6 +77,7 @@ public final class ScreenshotWatcher {
         debounceTimer = nil
         source?.cancel()
         source = nil
+        watchedDirectory = nil
         NSLog(diagnosticLine(event: DiagnosticEvent.watcherStopped.rawValue))
     }
 
@@ -92,7 +98,7 @@ public final class ScreenshotWatcher {
     }
 
     func checkForNewScreenshots() {
-        let dir = directory
+        let dir = watchedDirectory ?? directory
         let current = snapshotScreenshotFiles(in: dir)
         let newFiles = newScreenshotFiles(previous: lastSeen, current: current)
         lastSeen = current

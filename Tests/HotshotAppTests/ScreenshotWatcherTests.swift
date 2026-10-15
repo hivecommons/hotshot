@@ -365,4 +365,33 @@ final class ScreenshotWatcherTests: XCTestCase {
         watcher.checkForNewScreenshots()
         XCTAssertEqual(injected, [fresh])
     }
+
+    // MARK: - Stale fd vs current folder (#218)
+
+    /// The folder closure can change without a `start()` (the macOS location
+    /// default is re-read on every call), but the fd and baseline stay bound
+    /// to the folder opened at `start()`. A check must keep diffing that
+    /// folder, not report whatever already sits in the new one.
+    func testCheckKeepsDiffingTheFolderTheWatchIsBoundTo() throws {
+        let dirA = directory!
+        let dirB = try makeDirectory().path
+        var current = dirA
+        let watcher = makeWatcher(screenshotDirectory: { current })
+        var injected: [String] = []
+        watcher.onNewScreenshot = { injected.append($0) }
+
+        watcher.start()
+        defer { watcher.stop() }
+        current = dirB
+        try writeFile("Screenshot 2026-10-15 at 10.00.00.png", in: dirB)
+        watcher.checkForNewScreenshots()
+
+        XCTAssertEqual(injected, [], "a file in the unwatched folder is not a new screenshot")
+        XCTAssertNil(events.first { $0.event == "watcher.new_files" })
+
+        let fresh = try writeFile("Screenshot 2026-10-15 at 10.00.01.png", in: dirA)
+        watcher.checkForNewScreenshots()
+
+        XCTAssertEqual(injected, [fresh], "the watch still follows the folder it was started on")
+    }
 }

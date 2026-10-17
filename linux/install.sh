@@ -83,8 +83,11 @@ if [ "$GNOME_HOTKEY" = 1 ]; then
             *"[]"*) gsettings set "$BASE" custom-keybindings "['$KEYPATH']" ;;
             *) gsettings set "$BASE" custom-keybindings "${EXISTING%]*}, '$KEYPATH']" ;;
         esac
+        # GNOME splits the command with shell word rules, so a prefix
+        # containing spaces must be quoted or the hotkey launches nothing.
+        CMD="$PREFIX/hotshot-capture"
         gsettings set "$BASE.custom-keybinding:$KEYPATH" name 'hotshot'
-        gsettings set "$BASE.custom-keybinding:$KEYPATH" command "$PREFIX/hotshot-capture"
+        gsettings set "$BASE.custom-keybinding:$KEYPATH" command "'${CMD//\'/\'\\\'\'}'"
         gsettings set "$BASE.custom-keybinding:$KEYPATH" binding '<Ctrl><Shift>Print'
         echo "GNOME hotkey registered: Ctrl+Shift+PrintScreen -> hotshot-capture"
     else

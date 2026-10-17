@@ -192,7 +192,7 @@ grep -qF "custom-keybindings ['$KEYPATH']" "$GSLOG"
 check "gnome hotkey (empty list): writes singleton keybinding list" $?
 grep -qF "name hotshot" "$GSLOG"
 check "gnome hotkey: sets binding name" $?
-grep -qF "command $PREFIX/hotshot-capture" "$GSLOG"
+grep -qF "command '$PREFIX/hotshot-capture'" "$GSLOG"
 check "gnome hotkey: command points at installed script" $?
 grep -qF "binding <Ctrl><Shift>Print" "$GSLOG"
 check "gnome hotkey: binding is Ctrl+Shift+Print" $?
@@ -219,14 +219,14 @@ mkdir -p "$WORK"
 rm -f "$GSLOG"
 (cd "$WORK" && env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$STUBS:$BASEPATH" bash "$INSTALLER" --prefix rel/bin --gnome-hotkey >/dev/null 2>&1)
 if [ -x "$WORK/rel/bin/hotshot-capture" ]; then check "relative prefix: installed under cwd" 0; else check "relative prefix: installed under cwd" 1; fi
-grep -qF "command $WORK/rel/bin/hotshot-capture" "$GSLOG"
+grep -qF "command '$WORK/rel/bin/hotshot-capture'" "$GSLOG"
 check "relative prefix: hotkey command is absolute" $?
 
 rm -f "$GSLOG"
 # shellcheck disable=SC2088 # literal ~ is the input under test
 (cd "$WORK" && env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$STUBS:$BASEPATH" bash "$INSTALLER" --prefix '~/tools' --gnome-hotkey >/dev/null 2>&1)
 if [ -x "$FAKEHOME/tools/hotshot-capture" ]; then check "tilde prefix: installed under HOME" 0; else check "tilde prefix: installed under HOME" 1; fi
-grep -qF "command $FAKEHOME/tools/hotshot-capture" "$GSLOG"
+grep -qF "command '$FAKEHOME/tools/hotshot-capture'" "$GSLOG"
 check "tilde prefix: hotkey command is absolute" $?
 if [ -e "$WORK/~" ]; then check "tilde prefix: no literal ~ directory" 1; else check "tilde prefix: no literal ~ directory" 0; fi
 
@@ -238,7 +238,7 @@ rc=$?
 assert_eq "bare tilde prefix: exit 0" "0" "$rc"
 if [ -x "$FAKEHOME/hotshot-capture" ]; then check "bare tilde prefix: installed into HOME" 0; else check "bare tilde prefix: installed into HOME" 1; fi
 assert_contains "bare tilde prefix: reports HOME path" "Installed: $FAKEHOME/hotshot-capture" "$out"
-grep -qF "command $FAKEHOME/hotshot-capture" "$GSLOG"
+grep -qF "command '$FAKEHOME/hotshot-capture'" "$GSLOG"
 check "bare tilde prefix: hotkey command is absolute" $?
 if [ -e "$WORK/~" ]; then check "bare tilde prefix: no literal ~ directory" 1; else check "bare tilde prefix: no literal ~ directory" 0; fi
 
@@ -252,8 +252,24 @@ case "$out" in
     *"//hotshot-capture"*) check "trailing-slash prefix: no // in reported path" 1 ;;
     *) check "trailing-slash prefix: no // in reported path" 0 ;;
 esac
-grep -qF "command $TMP/slash/hotshot-capture" "$GSLOG"
+grep -qF "command '$TMP/slash/hotshot-capture'" "$GSLOG"
 check "trailing-slash prefix: hotkey command has single slash" $?
+
+# A prefix with a space is quoted so GNOME's shell-style word splitting
+# launches the installed script rather than its first path fragment.
+rm -f "$GSLOG"
+out="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$STUBS:$BASEPATH" bash "$INSTALLER" --prefix "$TMP/my tools/bin" --gnome-hotkey 2>&1)"
+rc=$?
+assert_eq "space prefix: exit 0" "0" "$rc"
+if [ -x "$TMP/my tools/bin/hotshot-capture" ]; then check "space prefix: installed under prefix" 0; else check "space prefix: installed under prefix" 1; fi
+grep -qF "command '$TMP/my tools/bin/hotshot-capture'" "$GSLOG"
+check "space prefix: hotkey command is single-quoted" $?
+
+# An apostrophe in the prefix survives the quoting ('\'' splice).
+rm -f "$GSLOG"
+env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$STUBS:$BASEPATH" bash "$INSTALLER" --prefix "$TMP/it's/bin" --gnome-hotkey >/dev/null 2>&1
+grep -qF "command '$TMP/it'\\''s/bin/hotshot-capture'" "$GSLOG"
+check "apostrophe prefix: hotkey command escapes the quote" $?
 
 # gsettings missing -> exit 1 with a clear message.
 out="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$MINBIN" \

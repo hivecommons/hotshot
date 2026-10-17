@@ -174,8 +174,8 @@ printf 'PNG' >"$second"
 third="$(unique_shot_path "$UNIQDIR" 20260304-050607-123)"
 assert_eq "unique_shot_path: suffix keeps counting" \
     "$UNIQDIR/hotshot-20260304-050607-123-2.png" "$third"
-[ "$(find "$UNIQDIR" -name 'hotshot-*.png' | wc -l)" -eq 2 ]
-check "unique_shot_path: earlier captures are left intact" $?
+ok=1; [ "$(find "$UNIQDIR" -name 'hotshot-*.png' | wc -l)" -eq 2 ] && ok=0
+check "unique_shot_path: earlier captures are left intact" $ok
 
 # ==============================================================================
 # descendants / classify_cli against a real /proc tree
@@ -230,8 +230,8 @@ got="$(descendants "$root" | head -n1)"
 assert_eq "descendants: first entry is the root pid" "$root" "$got"
 descendants "$root" | grep -qx "$root"
 check "descendants: includes root" $?
-[ "$(descendants "$root" | wc -l)" -ge 2 ]
-check "descendants: walks children (>=2 pids)" $?
+ok=1; [ "$(descendants "$root" | wc -l)" -ge 2 ] && ok=0
+check "descendants: walks children (>=2 pids)" $ok
 
 # ==============================================================================
 # argument parsing (runs before session detection — no display needed)
@@ -248,8 +248,8 @@ case "$out" in *"Usage: hotshot-capture.sh"*) check "--help: prints usage line" 
 
 BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" bash "$SCRIPT" --dir 2>/dev/null
 rc=$?
-[ "$rc" -ne 0 ]
-check "--dir without argument: non-zero exit" $?
+ok=1; [ "$rc" -ne 0 ] && ok=0
+check "--dir without argument: non-zero exit" $ok
 
 # no session at all -> die with the expected message
 out="$(env -u WAYLAND_DISPLAY -u DISPLAY -u XDG_SESSION_TYPE BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" PATH="$PATH" bash "$SCRIPT" 2>&1)"
@@ -302,8 +302,8 @@ root="$(spawn_tree claude)"
 shot="$(run_e2e "$root" --full 2>"$TMP/e2e.err")"
 rc=$?
 assert_eq "e2e claude: exit 0" "0" "$rc"
-[ -s "$shot" ]
-check "e2e claude: screenshot file created and echoed" $?
+ok=1; [ -s "$shot" ] && ok=0
+check "e2e claude: screenshot file created and echoed" $ok
 assert_eq "e2e claude: typed bracketed path" "[$shot] " "$(cat "$TYPELOG")"
 grep -q -- "-t image/png -i $shot" "$CLIPLOG"
 check "e2e claude: clipboard loaded via xclip image/png" $?
@@ -337,10 +337,10 @@ root="$(spawn_tree claude)"
 shot="$(run_e2e "$root" --full --no-type)"
 rc=$?
 assert_eq "e2e --no-type: exit 0" "0" "$rc"
-[ ! -e "$TYPELOG" ]
-check "e2e --no-type: nothing typed" $?
-[ -s "$shot" ]
-check "e2e --no-type: screenshot still created" $?
+ok=1; [ ! -e "$TYPELOG" ] && ok=0
+check "e2e --no-type: nothing typed" $ok
+ok=1; [ -s "$shot" ] && ok=0
+check "e2e --no-type: screenshot still created" $ok
 
 # Control character in the directory -> capture + clipboard proceed, typing refused.
 root="$(spawn_tree claude)"
@@ -349,10 +349,10 @@ dir"
 out="$(run_e2e "$root" --full --dir "$nl_dir" 2>"$TMP/e2e-ctrl.err")"
 rc=$?
 assert_eq "e2e control-char dir: exit 0" "0" "$rc"
-[ -s "$out" ]
-check "e2e control-char dir: screenshot still created" $?
-[ ! -e "$TYPELOG" ]
-check "e2e control-char dir: nothing typed" $?
+ok=1; [ -s "$out" ] && ok=0
+check "e2e control-char dir: screenshot still created" $ok
+ok=1; [ ! -e "$TYPELOG" ] && ok=0
+check "e2e control-char dir: nothing typed" $ok
 grep -q "injection.control_chars_refused" "$TMP/e2e-ctrl.err"
 check "e2e control-char dir: refusal warning printed" $?
 
@@ -362,10 +362,10 @@ mc_dir="$TMP/shots;rm"
 out="$(run_e2e "$root" --full --dir "$mc_dir" 2>"$TMP/e2e-meta.err")"
 rc=$?
 assert_eq "e2e metachar dir: exit 0" "0" "$rc"
-[ -s "$out" ]
-check "e2e metachar dir: screenshot still created" $?
-[ ! -e "$TYPELOG" ]
-check "e2e metachar dir: nothing typed" $?
+ok=1; [ -s "$out" ] && ok=0
+check "e2e metachar dir: screenshot still created" $ok
+ok=1; [ ! -e "$TYPELOG" ] && ok=0
+check "e2e metachar dir: nothing typed" $ok
 grep -q "injection.shell_metachars_refused" "$TMP/e2e-meta.err"
 check "e2e metachar dir: refusal warning printed" $?
 grep -q -- "-t image/png -i $out" "$CLIPLOG"
@@ -378,10 +378,10 @@ dir"
 out="$(run_e2e "$root" --full --dir "$both_dir" 2>"$TMP/e2e-both.err")"
 rc=$?
 assert_eq "e2e both-char dir: exit 0" "0" "$rc"
-[ -s "$out" ]
-check "e2e both-char dir: screenshot still created" $?
-[ ! -e "$TYPELOG" ]
-check "e2e both-char dir: nothing typed" $?
+ok=1; [ -s "$out" ] && ok=0
+check "e2e both-char dir: screenshot still created" $ok
+ok=1; [ ! -e "$TYPELOG" ] && ok=0
+check "e2e both-char dir: nothing typed" $ok
 grep -q "injection.control_chars_refused" "$TMP/e2e-both.err"
 check "e2e both-char dir: control chars label used" $?
 ! grep -q "injection.shell_metachars_refused" "$TMP/e2e-both.err"
@@ -429,8 +429,8 @@ mv "$STUBS/maim" "$STUBS/maim.ok" && mv "$STUBS/failmaim" "$STUBS/maim"
 run_e2e "$plain_root" --full >/dev/null 2>&1
 rc=$?
 assert_eq "e2e capture failure: exit 1" "1" "$rc"
-[ ! -e "$TYPELOG" ]
-check "e2e capture failure: nothing typed" $?
+ok=1; [ ! -e "$TYPELOG" ] && ok=0
+check "e2e capture failure: nothing typed" $ok
 mv "$STUBS/maim.ok" "$STUBS/maim"
 
 # X11 fallback: no maim on PATH -> scrot captures instead.
@@ -450,8 +450,8 @@ shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" DISPLAY=:99 PATH
     bash "$SCRIPT" --full)"
 rc=$?
 assert_eq "e2e scrot fallback: exit 0" "0" "$rc"
-[ -s "$shot" ]
-check "e2e scrot fallback: screenshot created via scrot" $?
+ok=1; [ -s "$shot" ] && ok=0
+check "e2e scrot fallback: screenshot created via scrot" $ok
 assert_eq "e2e scrot fallback: typed bracketed path" "[$shot] " "$(cat "$TYPELOG")"
 
 # ==============================================================================
@@ -509,8 +509,8 @@ root="$(spawn_tree claude)"
 shot="$(run_e2e_wayland "$root" --full 2>"$TMP/we2e.err")"
 rc=$?
 assert_eq "e2e wayland claude: exit 0" "0" "$rc"
-[ -s "$shot" ]
-check "e2e wayland claude: screenshot file created and echoed" $?
+ok=1; [ -s "$shot" ] && ok=0
+check "e2e wayland claude: screenshot file created and echoed" $ok
 assert_eq "e2e wayland claude: typed bracketed path" "[$shot] " "$(cat "$TYPELOG")"
 grep -q -- "--type image/png" "$CLIPLOG"
 check "e2e wayland claude: clipboard loaded via wl-copy image/png" $?
@@ -545,8 +545,8 @@ EOF
 run_e2e_wayland "$plain_root" --region >/dev/null 2>&1
 rc=$?
 assert_eq "e2e wayland cancelled slurp: exit 1" "1" "$rc"
-[ ! -e "$TYPELOG" ]
-check "e2e wayland cancelled slurp: nothing typed" $?
+ok=1; [ ! -e "$TYPELOG" ] && ok=0
+check "e2e wayland cancelled slurp: nothing typed" $ok
 mv "$WSTUBS/slurp.ok" "$WSTUBS/slurp"
 
 # No grim on PATH -> die with install hint.
@@ -621,12 +621,12 @@ shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=
     HOTSHOT_TEST_FOCUS_PID="$root" bash "$SCRIPT" --full 2>"$TMP/wsteal.err")"
 rc=$?
 assert_eq "e2e wayland focus stolen: exit 0" "0" "$rc"
-[ -s "$shot" ]
-check "e2e wayland focus stolen: screenshot still saved" $?
+ok=1; [ -s "$shot" ] && ok=0
+check "e2e wayland focus stolen: screenshot still saved" $ok
 grep -q -- "--type image/png" "$CLIPLOG"
 check "e2e wayland focus stolen: clipboard still loaded" $?
-[ ! -e "$TYPELOG" ]
-check "e2e wayland focus stolen: nothing typed" $?
+ok=1; [ ! -e "$TYPELOG" ] && ok=0
+check "e2e wayland focus stolen: nothing typed" $ok
 grep -q "hotshot \[WARN\] injection.focus_lost" "$TMP/wsteal.err"
 check "e2e wayland focus stolen: focus_lost warning emitted" $?
 
@@ -651,10 +651,10 @@ shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=
     HOTSHOT_TEST_FOCUS_PID="$root" bash "$SCRIPT" --full 2>"$TMP/hsteal.err")"
 rc=$?
 assert_eq "e2e hyprland focus stolen: exit 0" "0" "$rc"
-[ -s "$shot" ]
-check "e2e hyprland focus stolen: screenshot still saved" $?
-[ ! -e "$TYPELOG" ]
-check "e2e hyprland focus stolen: nothing typed" $?
+ok=1; [ -s "$shot" ] && ok=0
+check "e2e hyprland focus stolen: screenshot still saved" $ok
+ok=1; [ ! -e "$TYPELOG" ] && ok=0
+check "e2e hyprland focus stolen: nothing typed" $ok
 grep -q "hotshot \[WARN\] injection.focus_lost" "$TMP/hsteal.err"
 check "e2e hyprland focus stolen: focus_lost warning emitted" $?
 
@@ -681,12 +681,12 @@ shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=
     HOTSHOT_TEST_FOCUS_PID="$root" bash "$SCRIPT" --full 2>"$TMP/ipcfail.err")"
 rc=$?
 assert_eq "e2e wayland IPC fails after capture: exit 0" "0" "$rc"
-[ -s "$shot" ]
-check "e2e wayland IPC fails after capture: screenshot still saved" $?
+ok=1; [ -s "$shot" ] && ok=0
+check "e2e wayland IPC fails after capture: screenshot still saved" $ok
 grep -q -- "--type image/png" "$CLIPLOG"
 check "e2e wayland IPC fails after capture: clipboard still loaded" $?
-[ ! -e "$TYPELOG" ]
-check "e2e wayland IPC fails after capture: nothing typed" $?
+ok=1; [ ! -e "$TYPELOG" ] && ok=0
+check "e2e wayland IPC fails after capture: nothing typed" $ok
 grep -q "hotshot \[WARN\] injection.focus_lost" "$TMP/ipcfail.err"
 check "e2e wayland IPC fails after capture: focus_lost warning emitted" $?
 
@@ -712,10 +712,10 @@ shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" WAYLAND_DISPLAY=
     HOTSHOT_TEST_FOCUS_PID="$root" bash "$SCRIPT" --full 2>"$TMP/hyprnull.err")"
 rc=$?
 assert_eq "e2e hyprland null focus after capture: exit 0" "0" "$rc"
-[ -s "$shot" ]
-check "e2e hyprland null focus after capture: screenshot still saved" $?
-[ ! -e "$TYPELOG" ]
-check "e2e hyprland null focus after capture: nothing typed" $?
+ok=1; [ -s "$shot" ] && ok=0
+check "e2e hyprland null focus after capture: screenshot still saved" $ok
+ok=1; [ ! -e "$TYPELOG" ] && ok=0
+check "e2e hyprland null focus after capture: nothing typed" $ok
 grep -q "hotshot \[WARN\] injection.focus_lost" "$TMP/hyprnull.err"
 check "e2e hyprland null focus after capture: focus_lost warning emitted" $?
 
@@ -888,8 +888,8 @@ chmod +x "$FAILACTIVATE/xdotool"
 shot="$(run_e2e_stubs "$FAILACTIVATE" "$plain_root" --full 2>"$TMP/failactivate.err")"
 rc=$?
 assert_eq "e2e windowactivate failure: exit 0" "0" "$rc"
-[ ! -e "$TYPELOG" ]
-check "e2e windowactivate failure: nothing typed" $?
+ok=1; [ ! -e "$TYPELOG" ] && ok=0
+check "e2e windowactivate failure: nothing typed" $ok
 grep -q "hotshot \[WARN\] injection.focus_lost" "$TMP/failactivate.err"
 check "e2e windowactivate failure: focus_lost warning emitted" $?
 ok=1; [ -s "$shot" ] && ok=0
@@ -917,8 +917,8 @@ rm -f "$STOLEN/activated"
 shot="$(run_e2e_stubs "$STOLEN" "$plain_root" --full 2>"$TMP/stolen.err")"
 rc=$?
 assert_eq "e2e focus stolen after activate: exit 0" "0" "$rc"
-[ ! -e "$TYPELOG" ]
-check "e2e focus stolen after activate: nothing typed" $?
+ok=1; [ ! -e "$TYPELOG" ] && ok=0
+check "e2e focus stolen after activate: nothing typed" $ok
 grep -q "injection.focus_lost" "$TMP/stolen.err"
 check "e2e focus stolen after activate: focus_lost warning emitted" $?
 ok=1; [ -s "$shot" ] && ok=0

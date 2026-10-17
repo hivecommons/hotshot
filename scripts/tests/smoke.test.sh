@@ -56,6 +56,7 @@ STORE="$TMP/defaults.store"
 mkdir -p "$STUBS" "$NODEFAULTS"
 
 REAL_CP="$(command -v cp)"
+REAL_SLEEP="$(command -v sleep)"
 
 # defaults stub: one-key store in $STORE; logs every call.
 cat >"$STUBS/defaults" <<EOF
@@ -71,11 +72,17 @@ case "\$1" in
 esac
 EOF
 
-# sleep stub: the wait loop must not slow the suite down.
+# sleep stub: the wait loop must not slow the suite down, but it must still
+# yield real time — the stub app runs in the background and has to spawn
+# `defaults read` before it logs anything. With a no-op sleep the polls
+# finish in microseconds and the healthy case fails under load (seen
+# intermittently in scripts/shell-coverage.sh, where xtrace slows the stub).
+# 0.1s per poll with HOTSHOT_SMOKE_TIMEOUT=20 gives a 2s budget; the cases
+# that exhaust the loop on purpose cost at most 2s each.
 cat >"$STUBS/sleep" <<EOF
 #!/usr/bin/env bash
 echo "sleep \$*" >>"$LOG"
-exit 0
+exec "$REAL_SLEEP" 0.1
 EOF
 chmod +x "$STUBS"/*
 
@@ -100,7 +107,7 @@ run_smoke() { # $1 = project dir; $2 = PATH prefix
         BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" \
         STUB_EVENTS="${STUB_EVENTS:-app.launched watcher.started clipboard.watch_started}" \
         STUB_NO_DIR="${STUB_NO_DIR:-0}" \
-        HOTSHOT_SMOKE_TIMEOUT="${HOTSHOT_SMOKE_TIMEOUT:-3}" \
+        HOTSHOT_SMOKE_TIMEOUT="${HOTSHOT_SMOKE_TIMEOUT:-20}" \
         bash scripts/smoke.sh)
 }
 

@@ -130,7 +130,7 @@ Click the camera icon in your menu bar. Everything is configurable:
 Any CLI tool that accepts image file paths as input:
 
 - [Claude Code](https://claude.ai/code)
-- [GitHub Copilot CLI](https://githubnext.com/projects/copilot-cli)
+- [GitHub Copilot CLI](https://github.com/github/copilot-cli)
 - [aider](https://aider.chat)
 - [OpenCode](https://github.com/anomalyco/opencode)
 - Any tool where you can paste a file path and it reads the image

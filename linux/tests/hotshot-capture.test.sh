@@ -132,6 +132,16 @@ assert_eq "default_pictures_dir: uses xdg-user-dir PICTURES" "/home/u/Bilder" \
     "$(unset XDG_PICTURES_DIR; PATH="$XDGSTUBS:$PATH" default_pictures_dir)"
 assert_eq "default_pictures_dir: exported XDG_PICTURES_DIR wins" "/mnt/pics" \
     "$(XDG_PICTURES_DIR=/mnt/pics PATH="$XDGSTUBS:$PATH" default_pictures_dir)"
+cat >"$XDGSTUBS/home-xdg" <<'STUB'
+#!/usr/bin/env bash
+echo "$HOME"
+STUB
+mkdir -p "$TMP/homexdg" && cp "$XDGSTUBS/home-xdg" "$TMP/homexdg/xdg-user-dir" && chmod +x "$TMP/homexdg/xdg-user-dir"
+assert_eq "default_pictures_dir: xdg-user-dir answering \$HOME means unset" "/home/x/Pictures" \
+    "$(unset XDG_PICTURES_DIR; HOME=/home/x PATH="$TMP/homexdg:$PATH" default_pictures_dir)"
+mkdir -p "$TMP/emptyxdg" && printf '#!/usr/bin/env bash\nexit 0\n' >"$TMP/emptyxdg/xdg-user-dir" && chmod +x "$TMP/emptyxdg/xdg-user-dir"
+assert_eq "default_pictures_dir: empty xdg-user-dir answer falls back" "/home/x/Pictures" \
+    "$(unset XDG_PICTURES_DIR; HOME=/home/x PATH="$TMP/emptyxdg:$PATH" default_pictures_dir)"
 NOXDG="$TMP/noxdg"
 mkdir -p "$NOXDG"
 assert_eq "default_pictures_dir: falls back to \$HOME/Pictures" "/home/x/Pictures" \

@@ -23,14 +23,21 @@ DO_TYPE=1
 
 # xdg-user-dirs keeps PICTURES in ~/.config/user-dirs.dirs and does not export
 # it, so ask `xdg-user-dir`; an exported XDG_PICTURES_DIR still wins.
+# `xdg-user-dir` answers $HOME (or nothing) when PICTURES is not configured,
+# which would scatter shots into ~/hotshot, so treat that as unset.
 default_pictures_dir() {
+    local dir=""
     if [ -n "${XDG_PICTURES_DIR:-}" ]; then
         printf '%s' "$XDG_PICTURES_DIR"
-    elif command -v xdg-user-dir >/dev/null 2>&1; then
-        xdg-user-dir PICTURES
-    else
-        printf '%s' "$HOME/Pictures"
+        return
     fi
+    if command -v xdg-user-dir >/dev/null 2>&1; then
+        dir="$(xdg-user-dir PICTURES 2>/dev/null)"
+    fi
+    case "$dir" in
+        "" | "$HOME" | "$HOME/") printf '%s' "$HOME/Pictures" ;;
+        *) printf '%s' "$dir" ;;
+    esac
 }
 
 # The typed path is read by a terminal whose cwd differs from this launcher's,

@@ -92,15 +92,18 @@ if [ "$GNOME_HOTKEY" = 1 ]; then
         exit 1
     fi
 else
-    cat <<'EOF'
+    # Keep the installed path a single shell word, including spaces/apostrophes.
+    CMD="$PREFIX/hotshot-capture"
+    CMD="'${CMD//\'/\'\\\'\'}'"
+    cat <<EOF
 Bind a global hotkey to 'hotshot-capture' with your desktop environment:
 
   GNOME:    rerun with --gnome-hotkey, or Settings > Keyboard > Custom Shortcuts
   KDE:      System Settings > Shortcuts > Custom Shortcuts > New > Command/URL
-  sway:     bindsym Ctrl+Shift+Print exec ~/.local/bin/hotshot-capture
-  hyprland: bind = CTRL SHIFT, Print, exec, ~/.local/bin/hotshot-capture
+  sway:     bindsym Ctrl+Shift+Print exec $CMD
+  hyprland: bind = CTRL SHIFT, Print, exec, $CMD
   sxhkd:    ctrl + shift + Print
-                ~/.local/bin/hotshot-capture
+                $CMD
 
 Suggested binding: Ctrl+Shift+PrintScreen (region capture).
 EOF

@@ -159,7 +159,26 @@ assert_contains "dep report: jq optional hint when absent" "[optional] jq" "$out
 # ==============================================================================
 out="$(run_installer --prefix "$PREFIX" 2>&1)"
 assert_contains "hotkey help: names GNOME option" "--gnome-hotkey" "$out"
-assert_contains "hotkey help: sway binding hint" "bindsym Ctrl+Shift+Print" "$out"
+assert_contains "hotkey help: sway uses quoted custom prefix" "bindsym Ctrl+Shift+Print exec '$PREFIX/hotshot-capture'" "$out"
+assert_contains "hotkey help: hyprland uses quoted custom prefix" "bind = CTRL SHIFT, Print, exec, '$PREFIX/hotshot-capture'" "$out"
+assert_contains "hotkey help: sxhkd uses quoted custom prefix" "                '$PREFIX/hotshot-capture'" "$out"
+case "$out" in
+    *'~/.local/bin'*) check "hotkey help: no hardcoded default prefix" 1 ;;
+    *) check "hotkey help: no hardcoded default prefix" 0 ;;
+esac
+
+out="$(run_installer 2>&1)"
+assert_contains "hotkey help: default prefix expands HOME" "exec '$FAKEHOME/.local/bin/hotshot-capture'" "$out"
+
+out="$(cd "$TMP" && run_installer --prefix relative/bin/ 2>&1)"
+assert_contains "hotkey help: relative prefix is absolute without trailing slash" "exec '$TMP/relative/bin/hotshot-capture'" "$out"
+
+# shellcheck disable=SC2088 # literal ~ is the input under test
+out="$(run_installer --prefix '~/tools' 2>&1)"
+assert_contains "hotkey help: tilde prefix expands HOME" "exec '$FAKEHOME/tools/hotshot-capture'" "$out"
+
+out="$(run_installer --prefix "$TMP/it's/bin" 2>&1)"
+assert_contains "hotkey help: apostrophe prefix escapes the quote" "exec '$TMP/it'\\''s/bin/hotshot-capture'" "$out"
 
 # ==============================================================================
 # --gnome-hotkey gsettings list surgery

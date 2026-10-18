@@ -212,11 +212,11 @@ KEYPATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/hotsho
 
 # The stored command must word-split (POSIX shell rules) to exactly one argv.
 assert_hotkey_roundtrip() { # $1 = label, $2 = expected script path
-    local stored
+    local label="$1" expected="$2" stored
     stored="$(sed -n 's/^set [^ ]* command //p' "$GSLOG")"
     # shellcheck disable=SC2086,SC2294
     eval "set -- $stored"
-    if [ $# -eq 1 ] && [ "$1" = "$2" ]; then check "$1: stored command round-trips to one argv" 0; else check "$1: stored command round-trips to one argv" 1; fi
+    if [ $# -eq 1 ] && [ "$1" = "$expected" ]; then check "$label: stored command round-trips to one argv" 0; else check "$label: stored command round-trips to one argv" 1; fi
 }
 
 run_hotkey() { # $1 = existing keybindings value returned by gsettings get

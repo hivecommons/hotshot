@@ -17,11 +17,13 @@ public func macOSScreenshotLocation() -> String {
     task.arguments = ["read", "com.apple.screencapture", "location"]
     let pipe = Pipe()
     task.standardOutput = pipe
-    task.standardError = Pipe()
+    task.standardError = FileHandle.nullDevice
     do {
         try task.run()
-        task.waitUntilExit()
+        // Drain before waiting: a child that fills the pipe buffer blocks
+        // on write and never exits while we sit in waitUntilExit.
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
         if let path = normalizedMacOSScreenshotLocation(String(data: data, encoding: .utf8)) {
             return path
         }

@@ -2,6 +2,8 @@ import Foundation
 
 public let SCREENSHOT_EXTENSIONS: Set<String> = ["png", "jpg", "jpeg", "tiff", "bmp", "gif", "webp"]
 public let WATCH_DEBOUNCE_SECONDS = 1.5
+/// Max age of a new file, measured from when it became visible in the folder
+/// (see `fileVisibilityDate`), not from its last write.
 public let WATCH_FILE_AGE_MAX_SECONDS = 10.0
 
 public func normalizedMacOSScreenshotLocation(_ path: String?) -> String? {
@@ -131,8 +133,51 @@ public func screenshotCandidates(
     }
 }
 
+/// The later of a file's mtime and ctime. macOS renames the hidden in-progress
+/// capture to its visible name when the thumbnail is dismissed; rename(2)
+/// leaves mtime untouched but bumps ctime, so this is when the watcher could
+/// first see the file.
+public func laterDate(_ a: Date?, _ b: Date?) -> Date? {
+    switch (a, b) {
+    case let (a?, b?): return max(a, b)
+    case let (a?, nil): return a
+    case let (nil, b?): return b
+    case (nil, nil): return nil
+    }
+}
+
+/// When the file at `path` became visible in its folder: max(mtime, ctime).
+public func fileVisibilityDate(atPath path: String) -> Date? {
+    let mtime = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+    var st = stat()
+    var ctime: Date?
+    if stat(path, &st) == 0 {
+        ctime = Date(
+            timeIntervalSince1970: Double(st.st_ctimespec.tv_sec)
+                + Double(st.st_ctimespec.tv_nsec) / 1e9)
+    }
+    return laterDate(mtime, ctime)
+}
+
+/// Names of the non-quarantined, user-visible candidates that
+/// `newestInjectableScreenshot` refuses only because they are too old.
+public func staleScreenshotCandidates(
+    from candidates: [ScreenshotFileCandidate],
+    now: Date = Date(),
+    maxAge: TimeInterval = WATCH_FILE_AGE_MAX_SECONDS
+) -> [String] {
+    candidates
+        .filter { !$0.fileName.hasPrefix("hotshot-") }
+        .filter { !isHiddenScreenshotFileName($0.fileName) }
+        .filter { !$0.quarantined }
+        .filter { now.timeIntervalSince($0.modifiedAt) >= maxAge }
+        .map(\.fileName)
+}
+
 /// Newest candidate the watcher may inject, or nil. Skips hotshot's own
-/// saves, hidden in-progress captures, stale files and — because watch
+/// saves, hidden in-progress captures, stale files (`modifiedAt` is the
+/// visibility date: the rename that reveals a capture bumps ctime, so age
+/// is measured from then, not from the last write) and — because watch
 /// mode types the path into an AI session that will read the image —
 /// quarantined files, which were downloaded or received rather than
 /// captured by the user.

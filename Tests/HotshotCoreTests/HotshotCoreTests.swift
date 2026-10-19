@@ -152,6 +152,51 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertEqual(findMostRecentScreenshot(in: dir.path), visible.path)
     }
 
+    func testLaterDatePicksTheLaterOrWhicheverExists() {
+        let early = Date(timeIntervalSince1970: 100)
+        let late = Date(timeIntervalSince1970: 200)
+        XCTAssertEqual(laterDate(early, late), late)
+        XCTAssertEqual(laterDate(late, early), late)
+        XCTAssertEqual(laterDate(early, nil), early)
+        XCTAssertEqual(laterDate(nil, late), late)
+        XCTAssertNil(laterDate(nil, nil))
+    }
+
+    func testFileVisibilityDateIsNotBeforeMtimeAndNilForMissingFile() throws {
+        let dir = try makeDirectory()
+        let file = dir.appendingPathComponent("a.png")
+        try Data([0]).write(to: file)
+        try setModificationDate(Date(timeIntervalSince1970: 100), for: file)
+
+        let visible = try XCTUnwrap(fileVisibilityDate(atPath: file.path))
+        XCTAssertGreaterThan(visible, Date(timeIntervalSince1970: 100))
+        XCTAssertNil(fileVisibilityDate(atPath: dir.appendingPathComponent("missing.png").path))
+    }
+
+    func testCandidateOldByMtimeButFreshByVisibilityDateIsInjectable() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let renamedLate = [
+            ScreenshotFileCandidate(
+                fileName: "Screenshot late.png", modifiedAt: laterDate(now.addingTimeInterval(-30), now)!)
+        ]
+        XCTAssertEqual(
+            newestInjectableScreenshot(from: renamedLate, directory: "/d", now: now, maxAge: 10),
+            "/d/Screenshot late.png")
+    }
+
+    func testStaleScreenshotCandidatesListsOnlyRefusedForAge() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let candidates = [
+            ScreenshotFileCandidate(fileName: "old.png", modifiedAt: now.addingTimeInterval(-10)),
+            ScreenshotFileCandidate(fileName: "fresh.png", modifiedAt: now.addingTimeInterval(-9)),
+            ScreenshotFileCandidate(fileName: "hotshot-1.png", modifiedAt: now.addingTimeInterval(-50)),
+            ScreenshotFileCandidate(fileName: ".Screenshot x.png", modifiedAt: now.addingTimeInterval(-50)),
+            ScreenshotFileCandidate(
+                fileName: "dl.png", modifiedAt: now.addingTimeInterval(-50), quarantined: true),
+        ]
+        XCTAssertEqual(staleScreenshotCandidates(from: candidates, now: now, maxAge: 10), ["old.png"])
+    }
+
     func testNewestInjectableScreenshotSkipsHiddenInProgressCapture() {
         let dir = "/Users/me/Desktop"
         let now = Date(timeIntervalSince1970: 1_000)

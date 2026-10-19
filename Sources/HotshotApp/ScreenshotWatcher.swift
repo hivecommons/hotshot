@@ -11,6 +11,7 @@ public final class ScreenshotWatcher {
     private let screenshotDirectory: () -> String
     private let verboseDiagnostics: () -> Bool
     private let diagnostic: Diagnostic
+    private let visibilityDate: (String) -> Date?
     private var source: DispatchSourceFileSystemObject?
     private var debounceTimer: DispatchSourceTimer?
     private var lastSeen: Set<String> = []
@@ -25,11 +26,13 @@ public final class ScreenshotWatcher {
     public init(
         screenshotDirectory: @escaping () -> String,
         verboseDiagnostics: @escaping () -> Bool,
-        diagnostic: @escaping Diagnostic
+        diagnostic: @escaping Diagnostic,
+        visibilityDate: @escaping (String) -> Date? = fileVisibilityDate(atPath:)
     ) {
         self.screenshotDirectory = screenshotDirectory
         self.verboseDiagnostics = verboseDiagnostics
         self.diagnostic = diagnostic
+        self.visibilityDate = visibilityDate
     }
 
     deinit { stop() }
@@ -114,10 +117,7 @@ public final class ScreenshotWatcher {
 
         let candidates = screenshotCandidates(
             for: newFiles, directory: dir, isQuarantined: isQuarantinedFile(atPath:)
-        ) { fullPath in
-            let attrs = try? FileManager.default.attributesOfItem(atPath: fullPath)
-            return attrs?[.modificationDate] as? Date
-        }
+        ) { visibilityDate($0) }
 
         // Downloaded/received files (browser, Mail, Messages, AirDrop) carry
         // the quarantine xattr; screen captures never do. They are refused
@@ -132,7 +132,18 @@ public final class ScreenshotWatcher {
             }
         }
 
-        guard let path = newestInjectableScreenshot(from: candidates, directory: dir) else { return }
+        guard let path = newestInjectableScreenshot(from: candidates, directory: dir) else {
+            // Every remaining candidate was too old; say so rather than drop it silently.
+            let stale = staleScreenshotCandidates(from: candidates)
+            if !stale.isEmpty {
+                diagnostic("watcher.stale_skipped", .warn, nil, stale.count)
+                if verboseDiagnostics() {
+                    diagnostic(
+                        "watcher.stale_skipped", .warn, stale.sorted().joined(separator: ", "), nil)
+                }
+            }
+            return
+        }
 
         diagnostic("watcher.new_screenshot", .info, path, nil)
         onNewScreenshot?(path)

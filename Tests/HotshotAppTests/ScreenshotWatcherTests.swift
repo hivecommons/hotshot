@@ -52,14 +52,18 @@ final class ScreenshotWatcherTests: XCTestCase {
         return makeWatcher(screenshotDirectory: { dir })
     }
 
-    private func makeWatcher(screenshotDirectory: @escaping () -> String) -> ScreenshotWatcher {
+    private func makeWatcher(
+        screenshotDirectory: @escaping () -> String,
+        visibilityDate: @escaping (String) -> Date? = fileVisibilityDate(atPath:)
+    ) -> ScreenshotWatcher {
         return ScreenshotWatcher(
             screenshotDirectory: screenshotDirectory,
             verboseDiagnostics: { [weak self] in self?.verbose ?? false },
             diagnostic: { [weak self] event, severity, path, count in
                 self?.events.append(
                     Event(event: event, severity: severity, path: path, count: count))
-            })
+            },
+            visibilityDate: visibilityDate)
     }
 
     @discardableResult
@@ -100,10 +104,44 @@ final class ScreenshotWatcherTests: XCTestCase {
         XCTAssertEqual(events.last?.event, "watcher.new_screenshot")
     }
 
+    func testInjectsCaptureWhoseMtimeIsOldButBecameVisibleJustNow() throws {
+        // setAttributes bumps ctime to now, like the rename of a late-dismissed thumbnail.
+        let shot = try writeFile("Screenshot 2026-10-06 at 09.41.12.png", ageSeconds: 30)
+        var injected: [String] = []
+        let watcher = makeWatcher()
+        watcher.onNewScreenshot = { injected.append($0) }
+
+        watcher.checkForNewScreenshots()
+
+        XCTAssertEqual(injected, [shot])
+        XCTAssertNil(events.first { $0.event == "watcher.stale_skipped" })
+    }
+
+    func testReportsStaleRefusalsAsACountAndNamesOnlyWhenVerbose() throws {
+        try writeFile("b.png")
+        try writeFile("a.png")
+        var injected: [String] = []
+        let watcher = makeWatcher(screenshotDirectory: { self.directory }) { _ in
+            Date().addingTimeInterval(-60)
+        }
+        watcher.onNewScreenshot = { injected.append($0) }
+
+        watcher.checkForNewScreenshots()
+        verbose = true
+        try writeFile("c.png")
+        watcher.checkForNewScreenshots()
+
+        XCTAssertEqual(injected, [])
+        let skipped = events.filter { $0.event == "watcher.stale_skipped" }
+        XCTAssertEqual(skipped.map(\.count), [2, 1, nil])
+        XCTAssertEqual(skipped.last?.path, "c.png")
+        XCTAssertEqual(skipped.first?.severity, .warn)
+        XCTAssertNil(skipped.first?.path, "filenames must stay out of normal diagnostics")
+    }
+
     func testIgnoresHiddenStaleNonImageAndOwnOutputFiles() throws {
         try writeFile(".Screenshot in progress.png")
         try writeFile("notes.txt")
-        try writeFile("stale.png", ageSeconds: WATCH_FILE_AGE_MAX_SECONDS + 60)
         try writeFile("hotshot-20240101-120000.png")
         var injected: [String] = []
         let watcher = makeWatcher()

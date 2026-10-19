@@ -76,7 +76,9 @@ extract_hits <"$TRACE" >"$WORK/hits"
 executable_lines() {
     awk '
         heredoc != "" {
-            if ($0 == heredoc) heredoc = ""
+            line = $0
+            if (heredoc_dash) sub(/^\t+/, "", line)
+            if (line == heredoc) heredoc = ""
             next
         }
         /^[[:space:]]*esac/ { in_case = 0 }
@@ -91,6 +93,7 @@ executable_lines() {
             print NR
             if (match($0, /<<-?[[:space:]]*["\047]?[A-Za-z_][A-Za-z_0-9]*["\047]?/)) {
                 tag = substr($0, RSTART, RLENGTH)
+                heredoc_dash = (tag ~ /^<<-/)
                 gsub(/<<-?[[:space:]]*["\047]?/, "", tag)
                 gsub(/["\047]/, "", tag)
                 heredoc = tag
@@ -98,6 +101,54 @@ executable_lines() {
         }
     ' "$1"
 }
+
+# Guard the classifier the same way: a rule that over-excludes shrinks the
+# denominator and inflates every percentage without failing any suite.
+cat >"$WORK/classify.sh" <<'FIXEOF'
+#!/usr/bin/env bash
+# comment only
+
+x=1
+foo() {
+    echo "$x"
+}
+bar() { # trailing comment
+    :
+}
+case "$x" in
+    a)
+        y=$(printf '%s' "$x")
+        ;;
+    "b)")
+        z=$(true) ;;
+    c|d) w=1 ;;
+    *)
+        : ;;
+esac
+cat <<EOF
+    not code)
+EOF
+cat <<-'TAG'
+	indented body
+	TAG
+while read -r line; do
+    :
+done <"$0"
+if [ -n "$x" ]; then
+    arr=(a b)
+else
+    ((n++))
+fi
+{
+    echo grouped
+}
+FIXEOF
+got="$(executable_lines "$WORK/classify.sh" | tr '\n' ' ')"
+want='4 6 9 11 13 16 17 19 21 24 27 28 30 31 33 36 '
+if [ "$got" != "$want" ]; then
+    echo "FAIL shell-coverage self-test: executable_lines gave '$got', want '$want'" >&2
+    exit 1
+fi
 
 STATUS=0
 report() { # $1 = repo-relative script, $2 = floor
@@ -124,6 +175,30 @@ report() { # $1 = repo-relative script, $2 = floor
         echo "ok   $script: $pct% ($covered/$total), floor $floor%"
     fi
 }
+
+# Guard the floor arithmetic: every gated script sits at 100% on main, so CI
+# only ever takes the ok branch. Run in a subshell so ROOT/WORK/STATUS can be
+# pointed at a fixture without touching the real run.
+mkdir -p "$WORK/floor"
+printf '%s\n' 'a=1' 'b=2' 'c=3' 'd=4' >"$WORK/floor/four.sh"
+printf '%s\n' '#!/usr/bin/env bash' '# nothing runs' >"$WORK/floor/empty.sh"
+printf '%s\n' 'four.sh:1' 'four.sh:2' 'four.sh:4' >"$WORK/floor/hits"
+got="$(ROOT="$WORK/floor"; WORK="$ROOT"; report four.sh 75; report four.sh 76; report empty.sh 0)"
+want="$(printf '%s\n' \
+    '  uncovered: four.sh:3' \
+    'ok   four.sh: 75% (3/4), floor 75%' \
+    '  uncovered: four.sh:3' \
+    'FAIL four.sh: 75% (3/4) is below the 76% floor' \
+    'FAIL empty.sh: no executable lines found')"
+if [ "$got" != "$want" ]; then
+    echo "FAIL shell-coverage self-test: report gave:" >&2
+    echo "$got" >&2
+    exit 1
+fi
+if (ROOT="$WORK/floor"; WORK="$ROOT"; report four.sh 76 >/dev/null; exit "$STATUS"); then
+    echo "FAIL shell-coverage self-test: report did not set STATUS on a floor miss" >&2
+    exit 1
+fi
 
 echo "== shell coverage"
 report linux/hotshot-capture.sh "$FLOOR_CAPTURE"

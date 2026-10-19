@@ -332,10 +332,12 @@ final class HotshotCoreTests: XCTestCase {
         task.arguments = ["read", "com.apple.screencapture", "location"]
         let pipe = Pipe()
         task.standardOutput = pipe
-        task.standardError = Pipe()
+        task.standardError = FileHandle.nullDevice
         try task.run()
-        task.waitUntilExit()
+        // Drain before waiting: a child that fills the pipe buffer blocks
+        // on write and never exits while we sit in waitUntilExit.
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
         guard task.terminationStatus == 0 else { return nil }
         return String(data: data, encoding: .utf8)
     }

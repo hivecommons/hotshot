@@ -1,0 +1,38 @@
+name: Feature request
+description: Suggest an improvement or new capability for hotshot
+title: "feature: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [roadmap](https://github.com/hivecommons/hotshot/blob/main/ROADMAP.md) first, including its
+        non-goals. To request a new terminal or AI CLI, use the **Terminal or AI CLI support request** form.
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: What problem are you trying to solve, and in which workflow?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: The behavior, menu option, script flag or setting you want.
+    validations:
+      required: true
+  - type: checkboxes
+    id: platforms
+    attributes:
+      label: Platforms affected
+      description: The README keeps one clipboard/typing contract across all three platforms.
+      options:
+        - label: macOS
+        - label: Linux
+        - label: Windows
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds or other designs you have considered.

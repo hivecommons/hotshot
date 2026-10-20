@@ -1,0 +1,115 @@
+name: Bug report
+description: Report a reproducible problem with the macOS app or the Linux/Windows capture scripts
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. If you want hotshot to support a new terminal or AI CLI,
+        use the **Terminal or AI CLI support request** form instead.
+
+        **Security issues:** hotshot types paths into a live terminal, so a bug that lets a crafted
+        filename or clipboard payload run commands is a vulnerability. Do not file it here; follow
+        [SECURITY.md](https://github.com/hivecommons/hotshot/blob/main/SECURITY.md).
+
+        If nothing lands in your terminal, the
+        [injection-failure runbook](https://github.com/hivecommons/hotshot/blob/main/runbooks/injection-failure.md)
+        maps hotshot's diagnostic events to causes and may solve it before you file.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS app
+        - Linux (X11)
+        - Linux (Wayland)
+        - Windows
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: hotshot commit
+      description: hotshot has no tagged releases yet. Run `git rev-parse --short HEAD` in the clone you built or installed from.
+      placeholder: "90479e1"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        OS version. On Linux, also the desktop environment or compositor and the capture/clipboard/typing tools
+        installed (for example `maim`, `xclip`, `xdotool` or `grim`, `slurp`, `wl-copy`, `wtype`/`ydotool`, CopyQ).
+        On Windows, also the PowerShell host (`$PSVersionTable.PSVersion`) and whether you use the AutoHotkey script.
+      placeholder: "macOS 15.1 / Ubuntu 24.04 GNOME Wayland, grim + slurp + wl-copy + ydotool / Windows 11, PowerShell 5.1"
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal
+      description: The terminal app hotshot was injecting into (macOS recognises iTerm2, Terminal.app, Kitty, Alacritty, Warp and Ghostty), and tmux/zellij if used.
+      placeholder: "iTerm2 3.5 inside tmux"
+    validations:
+      required: true
+  - type: dropdown
+    id: cli
+    attributes:
+      label: AI CLI running in the terminal
+      options:
+        - Claude Code (claude)
+        - GitHub Copilot CLI (copilot)
+        - aider
+        - OpenCode (opencode)
+        - other / none
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: How the screenshot was taken
+      options:
+        - "macOS file mode (⌘⇧3 / ⌘⇧4 / ⌘⇧5)"
+        - "macOS clipboard mode (⌃⌘⇧3 / ⌃⌘⇧4)"
+        - "macOS menu action (Inject last screenshot / Inject clipboard image)"
+        - Linux hotkey (hotshot-capture)
+        - Windows hotkey (Start Menu shortcut or AutoHotkey)
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start Claude Code in iTerm2
+        2. Click the terminal, switch to the browser
+        3. Press ⌘⇧4 and select a region
+        4. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: For example, what you expected to be typed into the terminal or placed on the clipboard.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Diagnostic output
+      description: |
+        hotshot's `Hotshot [LEVEL] event.name` lines from Console.app or stderr (macOS), or the stderr of
+        `hotshot-capture` / `hotshot-capture.ps1`. These redact paths and clipboard contents by default.
+        Only add output from `HOTSHOT_VERBOSE_LOGGING=1` after checking it for private filenames or paths.
+      render: text

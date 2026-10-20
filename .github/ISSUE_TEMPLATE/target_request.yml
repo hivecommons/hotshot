@@ -1,0 +1,61 @@
+name: Terminal or AI CLI support request
+description: Ask hotshot to recognise a new terminal app or AI coding CLI
+title: "support: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        hotshot picks the injection format from the AI CLI it finds in the focused terminal:
+        Claude Code gets `[path] `, GitHub Copilot CLI, aider and OpenCode get a bare escaped path,
+        and anything else falls back to the bracketed form. On macOS it only injects into terminals it
+        recognises. Use this form to ask for a terminal or CLI that is not handled yet.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What should hotshot support?
+      options:
+        - A terminal app
+        - An AI CLI
+    validations:
+      required: true
+  - type: input
+    id: name
+    attributes:
+      label: Name and link
+      placeholder: "WezTerm — https://wezfurlong.org/wezterm/"
+    validations:
+      required: true
+  - type: checkboxes
+    id: platforms
+    attributes:
+      label: Platforms
+      options:
+        - label: macOS
+        - label: Linux
+        - label: Windows
+  - type: input
+    id: identifier
+    attributes:
+      label: How hotshot can identify it
+      description: |
+        For a macOS terminal, its bundle identifier (`osascript -e 'id of app "WezTerm"'`).
+        For an AI CLI, the executable name as it appears in `ps` / Task Manager.
+      placeholder: "com.github.wez.wezterm"
+    validations:
+      required: true
+  - type: textarea
+    id: input-format
+    attributes:
+      label: How it accepts images
+      description: |
+        For an AI CLI: does it read an image from a typed path, a bracketed `[path]`, a quoted path, or only
+        from a clipboard paste? Link its documentation if possible.
+        For a terminal: does pasting a path or sending Ctrl-V into it work today?
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: What happens today
+      description: What hotshot does now with this terminal or CLI, including any diagnostic lines.

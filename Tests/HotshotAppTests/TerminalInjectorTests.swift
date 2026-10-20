@@ -354,6 +354,74 @@ final class TerminalInjectorTests: XCTestCase {
         XCTAssertEqual(events.first { $0.event == "applescript.error" }?.detail, "System Events denied")
     }
 
+    // MARK: - focus guard (parity with the Linux/Windows `injection.focus_lost`)
+
+    func testInjectPathRefusesToTypeWhenTheTerminalIsNotFrontmost() {
+        let injector = makeInjector(
+            notificationsEnabled: true,
+            outcome: ttyThen("/dev/ttys001", rest: .success(FOCUS_LOST_RESULT)),
+            ttyCommands: { _ in ["-zsh"] })
+
+        XCTAssertFalse(injector.injectPath(screenshot, terminalBundleID: terminal))
+
+        XCTAssertEqual(loadedPaths, [screenshot], "the screenshot is still saved on the pasteboard")
+        let focusLost = events.first { $0.event == "injection.focus_lost" }
+        XCTAssertNotNil(focusLost)
+        XCTAssertEqual(focusLost?.severity, .warn)
+        XCTAssertEqual(focusLost?.detail, "screenshot saved and on the clipboard")
+        XCTAssertNil(focusLost?.path, "the focus-loss line must not carry the path")
+        XCTAssertFalse(eventNames.contains("applescript.error"), "focus loss is a refusal, not a script error")
+        XCTAssertEqual(
+            scripts.last,
+            notificationScript(
+                title: "Hotshot",
+                body: "Terminal did not come to the front \u{2014} nothing typed; screenshot saved and on the clipboard"))
+    }
+
+    func testFocusLossStaysSilentWhenNotificationsAreDisabled() {
+        let injector = makeInjector(outcome: { _ in .success(FOCUS_LOST_RESULT) })
+
+        XCTAssertFalse(injector.injectPath(screenshot, terminalBundleID: "com.example.unknown"))
+
+        XCTAssertEqual(eventNames, ["injection.focus_lost"])
+        XCTAssertEqual(
+            scripts,
+            [
+                genericInjectionScript(
+                    text: "[\(screenshot)] ", bundleID: "com.example.unknown", autoReturn: false)
+            ], "no notification script runs when notifications are off")
+    }
+
+    func testSendCtrlVRefusesWhenTheTerminalIsNotFrontmost() {
+        let injector = makeInjector(outcome: { _ in .success(FOCUS_LOST_RESULT) })
+
+        XCTAssertFalse(injector.sendCtrlV(terminalBundleID: terminal, terminalName: "Terminal"))
+
+        XCTAssertEqual(scripts, [ctrlVScript(bundleID: terminal)])
+        XCTAssertEqual(eventNames, ["injection.focus_lost"])
+    }
+
+    func testAnyOtherScriptResultStillCountsAsInjected() {
+        let injector = makeInjector(verboseDiagnostics: true, outcome: { _ in .success("typed") })
+
+        XCTAssertTrue(injector.sendCtrlV(terminalBundleID: terminal, terminalName: nil))
+        XCTAssertTrue(injector.injectPath(screenshot, terminalBundleID: "com.example.unknown"))
+
+        XCTAssertEqual(eventNames, ["applescript.result", "applescript.result"])
+    }
+
+    func testITerm2WriteTextIsNotSubjectToTheFocusGuard() {
+        // iTerm2 writes to the session object, so a (hypothetical) marker
+        // result is just a result: no refusal, no focus_lost diagnostic.
+        let injector = makeInjector(
+            outcome: ttyThen("/dev/ttys001", rest: .success(FOCUS_LOST_RESULT)),
+            ttyCommands: { _ in ["claude"] })
+
+        XCTAssertTrue(injector.injectPath(screenshot, terminalBundleID: iterm2))
+
+        XCTAssertFalse(eventNames.contains("injection.focus_lost"))
+    }
+
     func testFocusTerminalActivatesTheBundleByID() {
         makeInjector().focusTerminal(bundleID: "com.example.term")
 

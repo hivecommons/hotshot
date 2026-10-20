@@ -93,6 +93,7 @@ public enum DiagnosticEvent: String, CaseIterable {
     case injectionITerm2Script = "injection.iterm2.script"
     case injectionControlCharsRefused = "injection.control_chars_refused"
     case injectionShellMetacharsRefused = "injection.shell_metachars_refused"
+    case injectionFocusLost = "injection.focus_lost"
 
     case appleScriptResult = "applescript.result"
     case appleScriptError = "applescript.error"

@@ -2,6 +2,23 @@ import Foundation
 
 public let REFOCUS_DELAY_SECONDS = 0.3
 
+/// Result a System Events script returns instead of typing when the target
+/// terminal did not come to the front (parity with the Linux and Windows
+/// ports' `injection.focus_lost`). `TerminalInjector` turns it into a
+/// refusal so keystrokes never land in whichever app happens to be focused.
+public let FOCUS_LOST_RESULT = "focus_lost"
+
+/// AppleScript line that aborts a System Events script with
+/// `FOCUS_LOST_RESULT` unless a process with `bundleID` is frontmost.
+/// `activate` is asynchronous and may be deferred or refused by macOS, the
+/// user may switch apps during the refocus delay, and a quit terminal is
+/// relaunched rather than focused, so the frontmost state is re-read right
+/// before the keystrokes rather than assumed. Must be emitted inside a
+/// `tell application "System Events"` block.
+func focusGuardLine(bundleID: String) -> String {
+    "if (count of (application processes whose bundle identifier is \"\(bundleID)\" and frontmost is true)) is 0 then return \"\(FOCUS_LOST_RESULT)\""
+}
+
 /// AppleScript expression returning the tty of the terminal's focused
 /// session, per terminal app. Returns nil for terminals without
 /// scriptable tty access.
@@ -49,7 +66,9 @@ public func iterm2InjectionScript(text: String, autoReturn: Bool, autoFocus: Boo
 
 /// AppleScript that focuses the app with `bundleID` and types `text` via
 /// System Events. `text` is escaped here; `bundleID` comes from
-/// NSRunningApplication and is interpolated as-is.
+/// NSRunningApplication and is interpolated as-is. The script returns
+/// `FOCUS_LOST_RESULT` without typing when that app is not frontmost after
+/// the refocus delay.
 public func genericInjectionScript(text: String, bundleID: String, autoReturn: Bool) -> String {
     let escaped = appleScriptEscaped(text)
     var script = """
@@ -58,6 +77,7 @@ public func genericInjectionScript(text: String, bundleID: String, autoReturn: B
         end tell
         delay \(REFOCUS_DELAY_SECONDS)
         tell application "System Events"
+            \(focusGuardLine(bundleID: bundleID))
             keystroke "\(escaped)"
         """
     if autoReturn {
@@ -74,6 +94,8 @@ public func genericInjectionScript(text: String, bundleID: String, autoReturn: B
 }
 
 /// AppleScript that focuses the app with `bundleID` and presses Ctrl-V.
+/// Returns `FOCUS_LOST_RESULT` without pressing anything when that app is
+/// not frontmost after the refocus delay.
 public func ctrlVScript(bundleID: String) -> String {
     """
     tell application id "\(bundleID)"
@@ -81,6 +103,7 @@ public func ctrlVScript(bundleID: String) -> String {
     end tell
     delay \(REFOCUS_DELAY_SECONDS)
     tell application "System Events"
+        \(focusGuardLine(bundleID: bundleID))
         keystroke "v" using {control down}
     end tell
     """

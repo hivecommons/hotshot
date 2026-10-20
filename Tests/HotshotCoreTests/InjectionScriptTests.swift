@@ -55,6 +55,34 @@ final class InjectionScriptTests: XCTestCase {
         XCTAssertFalse(script.contains("keystroke return"))
     }
 
+    func testGenericScriptChecksTheTerminalIsFrontmostBeforeTyping() {
+        let script = genericInjectionScript(
+            text: "[/tmp/a.png] ", bundleID: "com.apple.Terminal", autoReturn: true)
+        let lines = script.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        let guardIndex = lines.firstIndex(of: focusGuardLine(bundleID: "com.apple.Terminal"))
+        let keystrokeIndex = lines.firstIndex(of: "keystroke \"[/tmp/a.png] \"")
+        XCTAssertNotNil(guardIndex)
+        XCTAssertNotNil(keystrokeIndex)
+        let systemEventsIndex = lines.firstIndex(of: "tell application \"System Events\"")
+        let delayIndex = lines.firstIndex(of: "delay \(REFOCUS_DELAY_SECONDS)")
+        if let guardIndex, let keystrokeIndex, let systemEventsIndex, let delayIndex {
+            XCTAssertLessThan(guardIndex, keystrokeIndex, "the frontmost check must precede the keystrokes")
+            XCTAssertLessThan(
+                systemEventsIndex, guardIndex,
+                "the guard runs inside the System Events block, after the refocus delay")
+            XCTAssertLessThan(delayIndex, guardIndex)
+        } else {
+            XCTFail("script is missing the System Events block, the delay, the guard or the keystroke")
+        }
+    }
+
+    func testFocusGuardLineNamesTheBundleAndReturnsTheFocusLostMarker() {
+        let line = focusGuardLine(bundleID: "net.kovidgoyal.kitty")
+        XCTAssertTrue(line.hasPrefix("if (count of (application processes whose bundle identifier is \"net.kovidgoyal.kitty\" and frontmost is true)) is 0"))
+        XCTAssertTrue(line.hasSuffix("then return \"\(FOCUS_LOST_RESULT)\""))
+        XCTAssertEqual(FOCUS_LOST_RESULT, "focus_lost")
+    }
+
     func testGenericScriptEscapesTextSoItCannotBreakOutOfLiteral() {
         let hostile = "x\" \nkeystroke return\n\""
         let script = genericInjectionScript(
@@ -77,6 +105,18 @@ final class InjectionScriptTests: XCTestCase {
         XCTAssertTrue(script.contains("delay \(REFOCUS_DELAY_SECONDS)"))
         XCTAssertTrue(script.contains("keystroke \"v\" using {control down}"))
         XCTAssertTrue(script.hasSuffix("end tell"))
+    }
+
+    func testCtrlVScriptChecksTheTerminalIsFrontmostBeforePasting() {
+        let script = ctrlVScript(bundleID: "com.googlecode.iterm2")
+        let lines = script.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        let guardIndex = lines.firstIndex(of: focusGuardLine(bundleID: "com.googlecode.iterm2"))
+        let keystrokeIndex = lines.firstIndex(of: "keystroke \"v\" using {control down}")
+        XCTAssertNotNil(guardIndex)
+        XCTAssertNotNil(keystrokeIndex)
+        if let guardIndex, let keystrokeIndex {
+            XCTAssertLessThan(guardIndex, keystrokeIndex, "the frontmost check must precede Ctrl-V")
+        }
     }
 
     // MARK: - notificationScript

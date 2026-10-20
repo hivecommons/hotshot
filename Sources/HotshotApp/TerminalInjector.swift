@@ -126,7 +126,7 @@ public final class TerminalInjector {
             diagnosticLine(
                 event: DiagnosticEvent.injectionCtrlV.rawValue,
                 detail: redacted(terminalName ?? bid, verbose: verboseDiagnostics())))
-        return runAppleScript(script)
+        return runFocusGuardedAppleScript(script)
     }
 
     @discardableResult
@@ -172,8 +172,26 @@ public final class TerminalInjector {
     }
 
     func injectViaGenericAppleScript(_ path: String, bundleID: String) -> Bool {
-        return runAppleScript(
+        return runFocusGuardedAppleScript(
             genericInjectionScript(text: path, bundleID: bundleID, autoReturn: autoReturn()))
+    }
+
+    /// Run a System Events script that may return `FOCUS_LOST_RESULT`
+    /// instead of typing (see `focusGuardLine`). Focus loss is reported like
+    /// the filename refusals: a warn diagnostic, a notification, and `false`,
+    /// so the coordinator never claims the path was injected. The screenshot
+    /// is already saved and on the pasteboard by then.
+    func runFocusGuardedAppleScript(_ source: String) -> Bool {
+        let outcome = scriptRunner(source)
+        if case .success(let value) = outcome, value == FOCUS_LOST_RESULT {
+            diagnostic(
+                "injection.focus_lost", .warn, nil, nil, "screenshot saved and on the clipboard")
+            showNotification(
+                title: "Hotshot",
+                body: "Terminal did not come to the front \u{2014} nothing typed; screenshot saved and on the clipboard")
+            return false
+        }
+        return report(outcome)
     }
 
     public func focusTerminal(bundleID: String) {
@@ -187,7 +205,12 @@ public final class TerminalInjector {
 
     @discardableResult
     func runAppleScript(_ source: String) -> Bool {
-        switch scriptRunner(source) {
+        report(scriptRunner(source))
+    }
+
+    /// Log a `ScriptOutcome` and map it onto the injector's success Bool.
+    private func report(_ outcome: ScriptOutcome) -> Bool {
+        switch outcome {
         case .success(let value):
             if verboseDiagnostics() {
                 diagnostic("applescript.result", .info, value ?? "(none)", nil, nil)

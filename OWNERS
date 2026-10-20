@@ -1,0 +1,8 @@
+# Prow OWNERS — approvers may /approve and merge; reviewers may /lgtm.
+# Maintainer roster: https://github.com/hivecommons/.github/blob/main/MAINTAINERS.md
+approvers:
+  - clubanderson
+  - kellyaa
+reviewers:
+  - clubanderson
+  - kellyaa

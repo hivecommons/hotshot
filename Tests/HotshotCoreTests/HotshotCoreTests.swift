@@ -371,6 +371,44 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertEqual(macOSScreenshotLocation(), expected)
     }
 
+    func testMacOSScreenshotLocationHonoursConfiguredLocation() throws {
+        let domain = "com.apple.screencapture"
+        let key = "location"
+        let previous = try readScreenCaptureLocationPreference()
+        let dir = try makeDirectory()
+        defer {
+            if let previous = previous {
+                // Remove only the newline added by `defaults read`, preserving
+                // empty values and any whitespace in the original path.
+                let value = previous.hasSuffix("\n") ? String(previous.dropLast()) : previous
+                XCTAssertNoThrow(try runDefaults(["write", domain, key, "-string", value]))
+            } else {
+                XCTAssertNoThrow(try runDefaults(["delete", domain, key]))
+            }
+        }
+
+        try runDefaults(["write", domain, key, "-string", dir.path])
+        // This must reach the configured-location return even on a runner
+        // whose screenshot preference was initially unset.
+        XCTAssertEqual(macOSScreenshotLocation(), dir.path)
+    }
+
+    private func runDefaults(_ arguments: [String]) throws {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
+        task.arguments = arguments
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        try task.run()
+        task.waitUntilExit()
+        guard task.terminationStatus == 0 else {
+            throw NSError(
+                domain: "HotshotCoreTests.defaults",
+                code: Int(task.terminationStatus),
+                userInfo: [NSLocalizedDescriptionKey: "defaults failed: \(arguments)"])
+        }
+    }
+
     private func readScreenCaptureLocationPreference() throws -> String? {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")

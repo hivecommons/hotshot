@@ -169,11 +169,9 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &focusedWindow) == .success else {
             return nil
         }
-        guard let window = focusedWindow, CFGetTypeID(window) == AXUIElementGetTypeID() else {
+        guard let focused = focusedWindowElement(focusedWindow) else {
             return nil
         }
-        // The CF type ID check above makes this force cast safe.
-        let focused = window as! AXUIElement
         var title: AnyObject?
         guard AXUIElementCopyAttributeValue(focused, kAXTitleAttribute as CFString, &title) == .success else {
             return nil

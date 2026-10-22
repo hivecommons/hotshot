@@ -43,10 +43,10 @@ PREFIX="${PREFIX%/}"
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
-# Uninstall mode
+# --- uninstall (parity with windows/install.ps1 -Uninstall) -------------------
 if [ "$UNINSTALL" = 1 ]; then
-    rm -f "$PREFIX/hotshot-capture"
-    if [ ! -e "$PREFIX/hotshot-capture" ]; then
+    if [ -e "$PREFIX/hotshot-capture" ]; then
+        rm -f "$PREFIX/hotshot-capture"
         echo "Removed: $PREFIX/hotshot-capture"
     else
         echo "Not installed: $PREFIX/hotshot-capture"
@@ -57,16 +57,16 @@ if [ "$UNINSTALL" = 1 ]; then
         KEYPATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/hotshot/"
         EXISTING="$(gsettings get "$BASE" custom-keybindings 2>/dev/null || echo "@as []")"
         case "$EXISTING" in
-            *"$KEYPATH"*)
-                # Remove the KEYPATH from the list
-                if [ "$EXISTING" = "['$KEYPATH']" ]; then
-                    gsettings set "$BASE" custom-keybindings "@as []"
-                else
-                    EXISTING="${EXISTING%]*}"
-                    EXISTING="${EXISTING}, '$KEYPATH']}"
-                    NEWLIST="${EXISTING//, '$KEYPATH'/}"
-                    gsettings set "$BASE" custom-keybindings "$NEWLIST"
-                fi
+            *"'$KEYPATH'"*)
+                # Drop our entry wherever it sits in the GVariant list: as a
+                # later element (", 'path'"), the first of several ("'path', ")
+                # or the only one; an emptied list must be typed ("@as []").
+                ENTRY="'$KEYPATH'"
+                NEWLIST="${EXISTING//, "$ENTRY"/}"
+                NEWLIST="${NEWLIST//"$ENTRY", /}"
+                NEWLIST="${NEWLIST//"$ENTRY"/}"
+                [ "$NEWLIST" = "[]" ] && NEWLIST="@as []"
+                gsettings set "$BASE" custom-keybindings "$NEWLIST"
                 gsettings reset-recursively "$BASE.custom-keybinding:$KEYPATH" 2>/dev/null || true
                 echo "GNOME hotkey removed"
                 ;;

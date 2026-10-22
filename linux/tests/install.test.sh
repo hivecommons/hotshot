@@ -195,6 +195,10 @@ if [ "$1" = "get" ]; then
     printf '%s\n' "${GSETTINGS_EXISTING:-@as []}"
     exit 0
 fi
+if [ "$1" = "reset-recursively" ]; then
+    echo "reset-recursively $2" >>"$GSLOG"
+    exit 0
+fi
 val="$4"
 q="${val:0:1}"
 if [ "$q" = "'" ] || [ "$q" = '"' ]; then
@@ -352,113 +356,67 @@ assert_contains "gnome hotkey without gsettings: message" "gsettings not found" 
 # --uninstall
 # ==============================================================================
 PREFIX_UNINSTALL="$TMP/uninstall_test"
-
-# Install first
 out="$(run_installer --prefix "$PREFIX_UNINSTALL" 2>&1)"
 if [ -x "$PREFIX_UNINSTALL/hotshot-capture" ]; then check "uninstall (setup): installed" 0; else check "uninstall (setup): installed" 1; fi
 
-# Uninstall and verify removal
-out="$(run_installer --prefix "$PREFIX_UNINSTALL" --uninstall 2>&1)"
+run_uninstall() { # $1 = existing keybindings value returned by gsettings get
+    rm -f "$GSLOG"
+    env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$STUBS:$BASEPATH" GSETTINGS_EXISTING="$1" \
+        bash "$INSTALLER" --prefix "$PREFIX_UNINSTALL" --uninstall
+}
+
+CUSTOM0="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/"
+CUSTOM1="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/"
+
+# Installed, hotkey never registered -> file removed, gsettings untouched.
+out="$(run_uninstall "['$CUSTOM0']" 2>&1)"
 rc=$?
 assert_eq "uninstall: exit 0" "0" "$rc"
-assert_contains "uninstall: removed message" "Removed:" "$out"
-assert_contains "uninstall: uninstalled message" "hotshot uninstalled" "$out"
+assert_contains "uninstall: removed message" "Removed: $PREFIX_UNINSTALL/hotshot-capture" "$out"
+assert_contains "uninstall: uninstalled message" "hotshot uninstalled." "$out"
 if [ ! -e "$PREFIX_UNINSTALL/hotshot-capture" ]; then check "uninstall: file removed" 0; else check "uninstall: file removed" 1; fi
+if [ ! -e "$GSLOG" ]; then check "uninstall (not registered): gsettings not written" 0; else check "uninstall (not registered): gsettings not written" 1; fi
+case "$out" in
+    *"GNOME hotkey removed"*) check "uninstall (not registered): no hotkey message" 1 ;;
+    *) check "uninstall (not registered): no hotkey message" 0 ;;
+esac
 
-# Uninstall when not installed
-out="$(run_installer --prefix "$PREFIX_UNINSTALL" --uninstall 2>&1)"
+# Nothing installed -> still exit 0, says so.
+out="$(run_uninstall "@as []" 2>&1)"
 rc=$?
 assert_eq "uninstall (not installed): exit 0" "0" "$rc"
-assert_contains "uninstall (not installed): shows not installed" "Not installed:" "$out"
+assert_contains "uninstall (not installed): message" "Not installed: $PREFIX_UNINSTALL/hotshot-capture" "$out"
 
-# Uninstall with GNOME hotkey registered
-GSLOG_UNINSTALL="$TMP/gsettings_uninstall.log"
-{
-    echo '#!/usr/bin/env bash'
-    echo "GSLOG='$GSLOG_UNINSTALL'"
-    cat <<'EOF'
-if [ "$1" = "get" ]; then
-    printf '%s\n' "${GSETTINGS_EXISTING:-@as []}"
-    exit 0
-fi
-if [ "$1" = "reset-recursively" ]; then
-    echo "reset-recursively $2" >>"$GSLOG"
-    exit 0
-fi
-val="$4"
-q="${val:0:1}"
-if [ "$q" = "'" ] || [ "$q" = '"' ]; then
-    parsed=""
-    closed=0
-    i=1
-    while [ "$i" -lt "${#val}" ]; do
-        c="${val:i:1}"
-        if [ "$closed" = 1 ]; then
-            exit 1
-        elif [ "$c" = '\' ]; then
-            i=$((i + 1))
-            c="${val:i:1}"
-            case "$c" in
-                '\' | '"' | "'") parsed="$parsed$c" ;;
-                *) exit 1 ;;
-            esac
-        elif [ "$c" = "$q" ]; then
-            closed=1
-        else
-            parsed="$parsed$c"
-        fi
-        i=$((i + 1))
-    done
-    [ "$closed" = 1 ] || exit 1
-    val="$parsed"
-fi
-echo "$1 $2 $3 $val" >>"$GSLOG"
-EOF
-} >"$STUBS/gsettings_uninstall"
-chmod +x "$STUBS/gsettings_uninstall"
-
-KEYPATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/hotshot/"
-
-# Uninstall with hotkey present (singleton)
-rm -f "$GSLOG_UNINSTALL"
-PREFIX_UNINSTALL_GNOME="$TMP/uninstall_gnome_test"
-mkdir -p "$PREFIX_UNINSTALL_GNOME"
-install -m 755 "$(dirname "$INSTALLER")/hotshot-capture.sh" "$PREFIX_UNINSTALL_GNOME/hotshot-capture"
-
-out="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$STUBS:$BASEPATH" \
-    GSETTINGS_EXISTING="['$KEYPATH']" bash "$INSTALLER" --prefix "$PREFIX_UNINSTALL_GNOME" --uninstall 2>&1)"
+# Hotkey is the only keybinding -> list emptied with the typed literal.
+out="$(run_uninstall "['$KEYPATH']" 2>&1)"
 rc=$?
 assert_eq "uninstall gnome (singleton): exit 0" "0" "$rc"
-assert_contains "uninstall gnome: GNOME hotkey removed message" "GNOME hotkey removed" "$out"
-grep -q "set org.gnome.settings-daemon.plugins.media-keys custom-keybindings @as \[\]" "$GSLOG_UNINSTALL"
-check "uninstall gnome (singleton): sets empty list" $?
-grep -qF "reset-recursively org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$KEYPATH" "$GSLOG_UNINSTALL"
-check "uninstall gnome: reset-recursively called" $?
+assert_contains "uninstall gnome (singleton): hotkey removed message" "GNOME hotkey removed" "$out"
+grep -qF "set org.gnome.settings-daemon.plugins.media-keys custom-keybindings @as []" "$GSLOG"
+check "uninstall gnome (singleton): writes empty typed list" $?
+grep -qF "reset-recursively org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$KEYPATH" "$GSLOG"
+check "uninstall gnome (singleton): resets the keybinding keys" $?
 
-# Uninstall with hotkey in a list of multiple
-rm -f "$GSLOG_UNINSTALL"
-mkdir -p "$PREFIX_UNINSTALL_GNOME"
-EXISTING_LIST="['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/', '$KEYPATH', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/']"
-out="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$STUBS:$BASEPATH" \
-    GSETTINGS_EXISTING="$EXISTING_LIST" bash "$INSTALLER" --prefix "$PREFIX_UNINSTALL_GNOME" --uninstall 2>&1)"
+# Hotkey in the middle of other keybindings -> only our entry is dropped.
+out="$(run_uninstall "['$CUSTOM0', '$KEYPATH', '$CUSTOM1']" 2>&1)"
 rc=$?
-assert_eq "uninstall gnome (multiple): exit 0" "0" "$rc"
-assert_contains "uninstall gnome (multiple): GNOME hotkey removed" "GNOME hotkey removed" "$out"
-grep -qF "set org.gnome.settings-daemon.plugins.media-keys custom-keybindings" "$GSLOG_UNINSTALL"
-check "uninstall gnome (multiple): updates keybindings list" $?
+assert_eq "uninstall gnome (middle): exit 0" "0" "$rc"
+grep -qF "set org.gnome.settings-daemon.plugins.media-keys custom-keybindings ['$CUSTOM0', '$CUSTOM1']" "$GSLOG"
+check "uninstall gnome (middle): keeps the other keybindings" $?
 
-# Uninstall when hotkey not registered
-rm -f "$GSLOG_UNINSTALL"
-mkdir -p "$PREFIX_UNINSTALL_GNOME"
-out="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$FAKEHOME" PATH="$STUBS:$BASEPATH" \
-    GSETTINGS_EXISTING="['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/']" \
-    bash "$INSTALLER" --prefix "$PREFIX_UNINSTALL_GNOME" --uninstall 2>&1)"
+# Hotkey first in the list.
+out="$(run_uninstall "['$KEYPATH', '$CUSTOM0']" 2>&1)"
 rc=$?
-assert_eq "uninstall gnome (not registered): exit 0" "0" "$rc"
-case "$out" in
-    *"GNOME hotkey removed"*) check "uninstall gnome (not registered): no hotkey message when not present" 1 ;;
-    *) check "uninstall gnome (not registered): no hotkey message when not present" 0 ;;
-esac
+assert_eq "uninstall gnome (first): exit 0" "0" "$rc"
+grep -qF "set org.gnome.settings-daemon.plugins.media-keys custom-keybindings ['$CUSTOM0']" "$GSLOG"
+check "uninstall gnome (first): keeps the other keybinding" $?
+
+# Hotkey last in the list.
+out="$(run_uninstall "['$CUSTOM0', '$KEYPATH']" 2>&1)"
+rc=$?
+assert_eq "uninstall gnome (last): exit 0" "0" "$rc"
+grep -qF "set org.gnome.settings-daemon.plugins.media-keys custom-keybindings ['$CUSTOM0']" "$GSLOG"
+check "uninstall gnome (last): keeps the other keybinding" $?
 
 # ==============================================================================
 echo

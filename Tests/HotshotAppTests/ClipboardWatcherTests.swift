@@ -202,6 +202,37 @@ final class ClipboardWatcherTests: XCTestCase {
         XCTAssertEqual(detected, [], "start() adopts the current change count")
     }
 
+    func testScheduledTimerDetectsSuccessiveForeignImageWrites() throws {
+        let png = try imageData(.png)
+        let firstDetection = expectation(description: "first image detected by timer")
+        let secondDetection = expectation(description: "second image detected by repeating timer")
+        var detected: [Int] = []
+        let watcher = makeWatcher()
+        watcher.onImageDetected = { changeCount in
+            detected.append(changeCount)
+            switch detected.count {
+            case 1: firstDetection.fulfill()
+            case 2: secondDetection.fulfill()
+            default: XCTFail("unexpected duplicate image detection")
+            }
+        }
+
+        watcher.start()
+        defer { watcher.stop() }
+
+        // Pump the run loop through XCTest, never calling check() directly.
+        setPasteboardData(png, forType: .png)
+        let firstChangeCount = pasteboard.changeCount
+        wait(for: [firstDetection], timeout: 5)
+        XCTAssertEqual(detected, [firstChangeCount])
+
+        // A second write after the first tick also guards against a one-shot timer.
+        setPasteboardData(png, forType: .png)
+        let secondChangeCount = pasteboard.changeCount
+        wait(for: [secondDetection], timeout: 5)
+        XCTAssertEqual(detected, [firstChangeCount, secondChangeCount])
+    }
+
     // MARK: - enrichWithSavedImage
 
     func testEnrichWithSavedImageSavesHotshotPNGAndRewritesThePasteboard() throws {

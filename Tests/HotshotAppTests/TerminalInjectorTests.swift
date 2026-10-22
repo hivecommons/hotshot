@@ -4,11 +4,10 @@ import XCTest
 
 @testable import HotshotApp
 
-/// Covers the injection shell extracted in #106. AppleScript never actually
-/// runs: a recording `ScriptRunner` stands in for `NSAppleScript` and a fake
-/// `ttyCommands` stands in for `ps`, so the suite stays hermetic on a CI
-/// runner with no Automation permission and no terminal running while still
-/// exercising every injection, Ctrl-V, focus and notification path.
+/// Covers the injection shell extracted in #106. Injection tests use a
+/// recording `ScriptRunner` and fake `ttyCommands`; default-runner tests use
+/// only self-contained AppleScript with no application targets. The suite
+/// needs neither Automation permission nor a running terminal.
 final class TerminalInjectorTests: XCTestCase {
     private var events: [Event] = []
     private var loadedPaths: [String] = []
@@ -466,6 +465,20 @@ final class TerminalInjectorTests: XCTestCase {
     }
 
     // MARK: - default runner
+
+    func testDefaultRunnerMapsAppleScriptStringResultToSuccess() {
+        XCTAssertEqual(
+            TerminalInjector.appleScriptRunner("return \"ttys003\""), .success("ttys003"))
+    }
+
+    func testDefaultRunnerPreservesRuntimeErrorDetail() {
+        let outcome = TerminalInjector.appleScriptRunner("error \"boom\" number 7")
+
+        guard case .failure(let detail) = outcome else {
+            return XCTFail("a runtime error must map to failure, got \(outcome)")
+        }
+        XCTAssertTrue(detail.contains("boom"), "expected the script error message, got \(detail)")
+    }
 
     func testDefaultRunnerNeverSucceedsForSourceThatCannotCompile() {
         // Compile errors surface either from `NSAppleScript(source:)` or from

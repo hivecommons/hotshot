@@ -47,12 +47,13 @@ public final class TargetTracker {
         self.terminalBundleIDs = terminalBundleIDs
     }
 
-    /// Track an app as the terminal target, naming it by its window title,
-    /// else its localized name, else "unknown".
+    /// Track an app as the terminal target, naming it by its window title
+    /// (if non-empty), else its localized name, else "unknown".
     public func setTarget(bundleID: String?, pid: pid_t, localizedName: String?) {
         self.bundleID = bundleID
         self.pid = pid
-        name = windowTitle(pid) ?? localizedName ?? "unknown"
+        let title = windowTitle(pid)
+        name = (title?.isEmpty == false ? title : nil) ?? localizedName ?? "unknown"
     }
 
     /// Refresh the menu's target label. The remembered name is replaced by

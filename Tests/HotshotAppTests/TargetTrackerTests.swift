@@ -65,6 +65,20 @@ final class TargetTrackerTests: XCTestCase {
         XCTAssertEqual(tracker.name, "vim — project")
     }
 
+    func testSetTargetFallsBackToLocalizedNameWhenTitleEmpty() {
+        titles[42] = ""
+        let tracker = makeTracker()
+        tracker.setTarget(bundleID: terminal, pid: 42, localizedName: "iTerm2")
+        XCTAssertEqual(tracker.name, "iTerm2")
+    }
+
+    func testSetTargetFallsBackToUnknownWhenTitleEmptyAndNoLocalizedName() {
+        titles[42] = ""
+        let tracker = makeTracker()
+        tracker.setTarget(bundleID: terminal, pid: 42, localizedName: nil)
+        XCTAssertEqual(tracker.name, "unknown")
+    }
+
     func testSetTargetFallsBackToLocalizedNameThenUnknown() {
         let tracker = makeTracker()
         tracker.setTarget(bundleID: terminal, pid: 42, localizedName: "iTerm2")

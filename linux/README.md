@@ -32,6 +32,7 @@ cd hotshot/linux
 ```
 
 The installer reports which dependencies are missing for your session type.
+Uninstall with `./install.sh --uninstall`.
 
 ### Dependencies
 

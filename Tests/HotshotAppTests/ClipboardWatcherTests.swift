@@ -106,12 +106,28 @@ final class ClipboardWatcherTests: XCTestCase {
         XCTAssertTrue(isPNG(converted))
     }
 
-    func testPNGDataConvertsJPEGToPNG() throws {
+    /// AppKit translates image types on a pasteboard, so writing JPEG makes a
+    /// TIFF/PNG representation readable too; this checks the ladder still
+    /// yields PNG, not which rung answered.
+    func testPNGDataYieldsPNGForJPEGPasteboardViaTranslation() throws {
         setPasteboardData(
             try imageData(.jpeg, hasAlpha: false),
             forType: NSPasteboard.PasteboardType("public.jpeg"))
         let converted = try XCTUnwrap(makeWatcher().pngData())
         XCTAssertTrue(isPNG(converted))
+    }
+
+    func testPNGDataReencodesJPEGWhenOnlyJPEGIsReadable() throws {
+        let jpeg = try imageData(.jpeg, hasAlpha: false)
+        let jpegType = NSPasteboard.PasteboardType("public.jpeg")
+        var asked: [NSPasteboard.PasteboardType] = []
+        let converted = try XCTUnwrap(
+            makeWatcher().pngData(read: { type in
+                asked.append(type)
+                return type == jpegType ? jpeg : nil
+            }))
+        XCTAssertTrue(isPNG(converted))
+        XCTAssertEqual(asked, [.png, .tiff, jpegType])
     }
 
     func testPNGDataIsNilForTextOnlyPasteboard() {

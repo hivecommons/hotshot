@@ -61,16 +61,21 @@ public final class ClipboardWatcher {
         ])
     }
 
-    func pngData() -> Data? {
+    /// `read` defaults to the watcher's pasteboard; tests pass a reader that
+    /// offers a single type so each rung of the ladder can be exercised on
+    /// its own (AppKit otherwise translates image types, so a pasteboard
+    /// holding JPEG also answers for TIFF and the JPEG rung never runs).
+    func pngData(read: ((NSPasteboard.PasteboardType) -> Data?)? = nil) -> Data? {
         let pb = pasteboard
-        if let png = pb.data(forType: .png) { return png }
-        if let tiff = pb.data(forType: .tiff),
+        let read = read ?? { pb.data(forType: $0) }
+        if let png = read(.png) { return png }
+        if let tiff = read(.tiff),
             let rep = NSBitmapImageRep(data: tiff),
             let png = rep.representation(using: .png, properties: [:])
         {
             return png
         }
-        if let jpeg = pb.data(forType: NSPasteboard.PasteboardType("public.jpeg")),
+        if let jpeg = read(NSPasteboard.PasteboardType("public.jpeg")),
             let rep = NSBitmapImageRep(data: jpeg),
             let png = rep.representation(using: .png, properties: [:])
         {

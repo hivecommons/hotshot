@@ -477,4 +477,24 @@ final class TerminalInjectorTests: XCTestCase {
         }
         XCTAssertFalse(makeRealInjector().runAppleScript("this is not AppleScript (("))
     }
+
+    func testDefaultRunnerReturnsTheScriptResultOnSuccess() {
+        // A bare `return` needs no `tell application`, so it runs on a CI
+        // runner without an Automation prompt and exercises the success
+        // mapping (`result.stringValue`) that the mocked runners bypass.
+        XCTAssertEqual(TerminalInjector.appleScriptRunner("return \"ttys003\""), .success("ttys003"))
+        XCTAssertEqual(makeRealInjector().runAppleScriptForResult("return \"ttys003\""), "ttys003")
+        XCTAssertTrue(makeRealInjector().runAppleScript("return \"ttys003\""))
+    }
+
+    func testDefaultRunnerReportsARuntimeErrorAsFailure() {
+        // `error` compiles and then fails at execution, so this is the
+        // `executeAndReturnError` branch regardless of where the OS reports
+        // compile errors.
+        guard case .failure(let detail) = TerminalInjector.appleScriptRunner("error \"boom\" number 7") else {
+            return XCTFail("a runtime error must surface as .failure")
+        }
+        XCTAssertTrue(detail.contains("boom"), detail)
+        XCTAssertNil(makeRealInjector().runAppleScriptForResult("error \"boom\" number 7"))
+    }
 }

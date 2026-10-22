@@ -202,6 +202,25 @@ final class ClipboardWatcherTests: XCTestCase {
         XCTAssertEqual(detected, [], "start() adopts the current change count")
     }
 
+    func testStartPollsThePasteboardAndFiresOnAForeignImageWrite() throws {
+        let fired = expectation(description: "timer tick detects the image")
+        let watcher = makeWatcher()
+        var detected: [Int] = []
+        watcher.onImageDetected = {
+            detected.append($0)
+            fired.fulfill()
+        }
+        defer { watcher.stop() }
+
+        watcher.start()
+        setPasteboardData(try imageData(.png), forType: .png)
+
+        // No explicit check(): only the scheduled timer can fire this. The
+        // wait spins the run loop so the 0.5s tick runs.
+        wait(for: [fired], timeout: CLIPBOARD_POLL_INTERVAL_SECONDS * 10)
+        XCTAssertEqual(detected, [pasteboard.changeCount])
+    }
+
     // MARK: - enrichWithSavedImage
 
     func testEnrichWithSavedImageSavesHotshotPNGAndRewritesThePasteboard() throws {

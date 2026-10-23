@@ -21,6 +21,7 @@ hotshot is built from source on each machine (`swift build -c release`, or `scri
    - Binary: `sudo cp .build/release/hotshot /usr/local/bin/`
    - App bundle: `scripts/bundle.sh --install` (stops any running instance, replaces `/Applications/Hotshot.app`, relaunches)
    - Linux / Windows: re-run `linux/install.sh` or `windows/install.ps1` from the good checkout.
+   - Homebrew (`brew install hivecommons/hive/hotshot`): the tap formula builds only the current tagged release from source, so `brew uninstall hotshot` and install the previous tag from a source checkout as above until the tap is fixed.
 4. Quit and relaunch hotshot so the old process is not still running.
 
 ## Verify

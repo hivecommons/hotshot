@@ -29,6 +29,7 @@ git clone https://github.com/hivecommons/hotshot.git
 cd hotshot/linux
 ./install.sh                 # installs to ~/.local/bin/hotshot-capture
 ./install.sh --gnome-hotkey  # also binds Ctrl+Shift+PrintScreen on GNOME
+./install.sh --prefix DIR    # install somewhere other than ~/.local/bin
 ```
 
 The installer reports which dependencies are missing for your session type.

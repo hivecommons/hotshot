@@ -11,12 +11,14 @@ the macOS app, Linux script, and Windows helper.
 - Clipboard enrichment with image data, file URLs, and shell-escaped text paths.
 - Hermetic Linux and Windows tests plus extracted `HotshotCore` helpers for
   shared macOS decision logic.
+- First tagged release (v0.1.0) and a Homebrew install path via the
+  `hivecommons/homebrew-hive` tap (`brew install hivecommons/hive/hotshot`).
 
 ## Near term
 
-1. **Package distribution:** publish first-class install paths beyond manual
-   scripts, starting with Homebrew and documenting follow-on candidates such as
-   winget and distro packages.
+1. **Package distribution:** extend first-class install paths beyond Homebrew
+   on macOS, documenting follow-on candidates such as winget and distro
+   packages.
 2. **Cross-platform parity:** keep Linux Wayland/X11 and Windows behavior aligned
    with macOS for clipboard modes, typed injection, warning paths, and safe
    degradation when helper tools are missing.

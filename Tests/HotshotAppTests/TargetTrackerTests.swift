@@ -264,12 +264,46 @@ final class TargetTrackerTests: XCTestCase {
     }
 
     func testMenuWillOpenDoesNotSeedWhenTargetTracked() {
+        running = [42]
         let tracker = makeTracker()
         tracker.setTarget(bundleID: terminal, pid: 42, localizedName: "iTerm2")
         var seeds = 0
         tracker.menuWillOpen { seeds += 1 }
         XCTAssertEqual(seeds, 0)
         XCTAssertEqual(labels, ["Target: iTerm2"])
+    }
+
+    func testMenuWillOpenDropsQuitTargetAndReseeds() {
+        running = [42]
+        let tracker = makeTracker()
+        tracker.appDidActivate(bundleID: terminal, pid: 42, localizedName: "iTerm2")
+        running = [43]
+        labels = []
+        events = []
+        var seeds = 0
+        tracker.menuWillOpen {
+            seeds += 1
+            XCTAssertNil(tracker.bundleID)
+            tracker.setTarget(bundleID: self.terminal, pid: 43, localizedName: "Terminal")
+        }
+        XCTAssertEqual(seeds, 1)
+        XCTAssertEqual(tracker.pid, 43)
+        XCTAssertEqual(labels, [MenuModel.targetTitle(nil), "Target: Terminal"])
+        XCTAssertEqual(events.map(\.event), [DiagnosticEvent.targetTerminated.rawValue])
+    }
+
+    func testMenuWillOpenDropsQuitTargetWhenSeedFails() {
+        running = [42]
+        let tracker = makeTracker()
+        tracker.appDidActivate(bundleID: terminal, pid: 42, localizedName: "iTerm2")
+        running = []
+        labels = []
+        var seeds = 0
+        tracker.menuWillOpen { seeds += 1 }
+        XCTAssertEqual(seeds, 1)
+        XCTAssertNil(tracker.bundleID)
+        XCTAssertNil(tracker.pid)
+        XCTAssertEqual(labels, [MenuModel.targetTitle(nil)])
     }
 
     func testMenuWillOpenWithFailedSeedLeavesLabelUntouched() {

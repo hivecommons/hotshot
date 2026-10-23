@@ -99,12 +99,17 @@ public final class TargetTracker {
     /// The tracked terminal for injection, or nil when none is tracked or
     /// its process has quit (the stale target is dropped as a side effect).
     public func currentTarget() -> (bundleID: String, name: String?)? {
+        dropTargetIfQuit()
         guard let bundleID else { return nil }
+        return (bundleID, name)
+    }
+
+    /// Clear the target when its process is no longer running, so a missed
+    /// terminate notification cannot leave a stale terminal tracked.
+    private func dropTargetIfQuit() {
         if let pid, !isRunning(pid) {
             appDidTerminate(pid: pid)
-            return nil
         }
-        return (bundleID, name)
     }
 
     private func clearTarget() {
@@ -116,9 +121,11 @@ public final class TargetTracker {
         }
     }
 
-    /// The status-bar menu is about to open: seed a target only when none
-    /// is tracked yet, then refresh the label.
+    /// The status-bar menu is about to open: drop the target if its process
+    /// has quit, seed a target only when none is tracked, then refresh the
+    /// label.
     public func menuWillOpen(seed: () -> Void) {
+        dropTargetIfQuit()
         if bundleID == nil {
             seed()
         }

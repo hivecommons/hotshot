@@ -28,11 +28,13 @@ body:
     validations:
       required: true
   - type: input
-    id: commit
+    id: version
     attributes:
-      label: hotshot commit
-      description: hotshot has no tagged releases yet. Run `git rev-parse --short HEAD` in the clone you built or installed from.
-      placeholder: "90479e1"
+      label: hotshot version
+      description: |
+        Homebrew: run `brew list --versions hotshot`. Source build (including the Linux and Windows scripts):
+        run `git describe --tags --always` in the clone you built or installed from.
+      placeholder: "hotshot 0.1.0 / v0.1.0-3-g90479e1"
     validations:
       required: true
   - type: input

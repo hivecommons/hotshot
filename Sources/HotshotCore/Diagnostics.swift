@@ -58,6 +58,7 @@ public enum DiagnosticEvent: String, CaseIterable {
     case targetSeeded = "target.seeded"
     case targetFoundRunning = "target.found_running"
     case targetChanged = "target.changed"
+    case targetTerminated = "target.terminated"
 
     case clipboardWatchStarted = "clipboard.watch_started"
     case clipboardWatchStopped = "clipboard.watch_stopped"

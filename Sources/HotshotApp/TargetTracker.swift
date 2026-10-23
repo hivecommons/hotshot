@@ -82,6 +82,40 @@ public final class TargetTracker {
         return true
     }
 
+    /// An app quit. When it is the tracked terminal the target is cleared so
+    /// injection falls back to the no-target branch instead of relaunching
+    /// it. Returns whether the target was cleared.
+    @discardableResult
+    public func appDidTerminate(pid terminatedPID: pid_t) -> Bool {
+        guard let pid, pid == terminatedPID else { return false }
+        let terminatedName = name ?? "unknown"
+        clearTarget()
+        diagnostic(
+            DiagnosticEvent.targetTerminated.rawValue,
+            redacted(terminatedName, verbose: verbose()))
+        return true
+    }
+
+    /// The tracked terminal for injection, or nil when none is tracked or
+    /// its process has quit (the stale target is dropped as a side effect).
+    public func currentTarget() -> (bundleID: String, name: String?)? {
+        guard let bundleID else { return nil }
+        if let pid, !isRunning(pid) {
+            appDidTerminate(pid: pid)
+            return nil
+        }
+        return (bundleID, name)
+    }
+
+    private func clearTarget() {
+        bundleID = nil
+        pid = nil
+        name = nil
+        if hasTargetLabel() {
+            setTargetLabel(MenuModel.targetTitle(nil))
+        }
+    }
+
     /// The status-bar menu is about to open: seed a target only when none
     /// is tracked yet, then refresh the label.
     public func menuWillOpen(seed: () -> Void) {

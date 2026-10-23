@@ -179,6 +179,61 @@ final class TargetTrackerTests: XCTestCase {
         XCTAssertEqual(events.first?.detail, "<redacted>")
     }
 
+    func testTerminateOfTrackedPidClearsTargetAndLabel() {
+        running = [42]
+        let tracker = makeTracker()
+        tracker.appDidActivate(bundleID: terminal, pid: 42, localizedName: "iTerm2")
+        labels = []
+        events = []
+        XCTAssertTrue(tracker.appDidTerminate(pid: 42))
+        XCTAssertNil(tracker.bundleID)
+        XCTAssertNil(tracker.pid)
+        XCTAssertNil(tracker.name)
+        XCTAssertEqual(labels, [MenuModel.targetTitle(nil)])
+        XCTAssertEqual(events.map(\.event), [DiagnosticEvent.targetTerminated.rawValue])
+        XCTAssertEqual(events.first?.detail, "<redacted>")
+    }
+
+    func testTerminateOfOtherPidIsIgnored() {
+        let tracker = makeTracker()
+        tracker.appDidActivate(bundleID: terminal, pid: 42, localizedName: "iTerm2")
+        events = []
+        XCTAssertFalse(tracker.appDidTerminate(pid: 7))
+        XCTAssertEqual(tracker.bundleID, terminal)
+        XCTAssertEqual(tracker.pid, 42)
+        XCTAssertTrue(events.isEmpty)
+    }
+
+    func testTerminateWithoutTargetIsIgnored() {
+        let tracker = makeTracker()
+        XCTAssertFalse(tracker.appDidTerminate(pid: 42))
+        XCTAssertTrue(events.isEmpty)
+    }
+
+    func testCurrentTargetReturnsRunningTerminal() {
+        running = [42]
+        let tracker = makeTracker()
+        tracker.appDidActivate(bundleID: terminal, pid: 42, localizedName: "iTerm2")
+        let target = tracker.currentTarget()
+        XCTAssertEqual(target?.bundleID, terminal)
+        XCTAssertEqual(target?.name, "iTerm2")
+    }
+
+    func testCurrentTargetIsNilAndClearedWhenProcessHasQuit() {
+        running = [42]
+        let tracker = makeTracker()
+        tracker.appDidActivate(bundleID: terminal, pid: 42, localizedName: "iTerm2")
+        running = []
+        XCTAssertNil(tracker.currentTarget())
+        XCTAssertNil(tracker.bundleID)
+        XCTAssertNil(tracker.pid)
+        XCTAssertEqual(labels.last, MenuModel.targetTitle(nil))
+    }
+
+    func testCurrentTargetIsNilWithoutTarget() {
+        XCTAssertNil(makeTracker().currentTarget())
+    }
+
     func testTerminalActivationLogsNameWhenVerbose() {
         verbose = true
         let tracker = makeTracker()

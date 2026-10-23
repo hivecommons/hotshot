@@ -71,8 +71,8 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     lazy var injectionCoordinator: InjectionCoordinator = {
         InjectionCoordinator(
             target: { [unowned self] in
-                self.targetTracker.bundleID.map {
-                    InjectionCoordinator.Target(bundleID: $0, name: self.targetTracker.name)
+                self.targetTracker.currentTarget().map {
+                    InjectionCoordinator.Target(bundleID: $0.bundleID, name: $0.name)
                 }
             },
             enrichClipboard: { [unowned self] in self.clipboardWatcher.enrichWithSavedImage() },
@@ -324,6 +324,12 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             name: NSWorkspace.didActivateApplicationNotification,
             object: nil
         )
+        workspace.notificationCenter.addObserver(
+            self,
+            selector: #selector(appDidTerminate(_:)),
+            name: NSWorkspace.didTerminateApplicationNotification,
+            object: nil
+        )
     }
 
     @objc func appDidActivate(_ notification: Notification) {
@@ -332,6 +338,13 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         else { return }
         targetTracker.appDidActivate(
             bundleID: app.bundleIdentifier, pid: app.processIdentifier, localizedName: app.localizedName)
+    }
+
+    @objc func appDidTerminate(_ notification: Notification) {
+        guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+            as? NSRunningApplication
+        else { return }
+        targetTracker.appDidTerminate(pid: app.processIdentifier)
     }
 
     // MARK: - Path Injection

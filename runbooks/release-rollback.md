@@ -1,6 +1,6 @@
 # Runbook: rolling back to a known-good hotshot build
 
-hotshot is built from source on each machine (`swift build -c release`, or `scripts/bundle.sh` for an app bundle). There is no auto-updater and no published binary, so a bad change only reaches a machine when its user pulls and rebuilds. Rolling back means rebuilding an earlier commit and reinstalling it on that machine.
+hotshot is built from source on each machine (`swift build -c release`, or `scripts/bundle.sh` for an app bundle). Releases are tagged `v`-prefixed semver versions (starting at v0.1.0) on GitHub, but there is no auto-updater and no published binary, so a bad change only reaches a machine when its user pulls and rebuilds. Rolling back means checking out the previous tag (or, between releases, an earlier commit) and reinstalling it on that machine.
 
 ## Detect
 
@@ -10,11 +10,11 @@ hotshot is built from source on each machine (`swift build -c release`, or `scri
 
 ## Contain
 
-1. Find the last good commit: `git log --oneline` in your clone, or the last green commit of CI on `main`.
-2. Check it out and rebuild. Use a detached checkout so your branch is untouched:
+1. Find the last good version: list tags with `git tag --sort=-v:refname` and pick the previous release tag. Between releases, use `git log --oneline` or the last green commit of CI on `main`.
+2. Check out the previous tag and rebuild. Use a detached checkout so your branch is untouched:
    ```sh
    git fetch origin
-   git checkout <good-sha>
+   git checkout <previous-tag>   # e.g. v0.1.0; or <good-sha> between releases
    swift build -c release
    ```
 3. Reinstall it, matching how it was installed originally:

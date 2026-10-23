@@ -51,9 +51,12 @@ No dragging files around. No copy-pasting paths. No "here let me find where that
 
 Requires macOS 13+ and Swift (comes with Xcode or Xcode Command Line Tools).
 
+Releases are tagged with `v`-prefixed semantic versions; see the [latest release](https://github.com/hivecommons/hotshot/releases/latest) (first release: [v0.1.0](https://github.com/hivecommons/hotshot/releases/tag/v0.1.0)) and the [CHANGELOG](CHANGELOG.md). hotshot is built from source, so check out a release tag to install that version. A Homebrew formula is planned via `hivecommons/homebrew-hive` once the release exists.
+
 ```bash
 git clone https://github.com/hivecommons/hotshot.git
 cd hotshot
+git checkout v0.1.0
 swift build -c release
 sudo cp .build/release/hotshot /usr/local/bin/
 ```

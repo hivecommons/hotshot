@@ -51,7 +51,17 @@ No dragging files around. No copy-pasting paths. No "here let me find where that
 
 Requires macOS 13+ and Swift (comes with Xcode or Xcode Command Line Tools).
 
-Releases are tagged with `v`-prefixed semantic versions; see the [latest release](https://github.com/hivecommons/hotshot/releases/latest) (first release: [v0.1.0](https://github.com/hivecommons/hotshot/releases/tag/v0.1.0)) and the [CHANGELOG](CHANGELOG.md). hotshot is built from source, so check out a release tag to install that version. A Homebrew formula is planned via `hivecommons/homebrew-hive` once the release exists.
+### Homebrew (recommended)
+
+```bash
+brew install hivecommons/hive/hotshot
+```
+
+The formula lives in the [`hivecommons/homebrew-hive`](https://github.com/hivecommons/homebrew-hive) tap and builds the tagged release from source on your machine. It installs the `hotshot` command only; for a double-clickable app see [Build as an app bundle](#build-as-an-app-bundle-optional). Upgrade later with `brew upgrade hotshot`.
+
+### From source
+
+Releases are tagged with `v`-prefixed semantic versions; see the [latest release](https://github.com/hivecommons/hotshot/releases/latest) (first release: [v0.1.0](https://github.com/hivecommons/hotshot/releases/tag/v0.1.0)) and the [CHANGELOG](CHANGELOG.md). Check out a release tag to build that version:
 
 ```bash
 git clone https://github.com/hivecommons/hotshot.git
@@ -61,7 +71,9 @@ swift build -c release
 sudo cp .build/release/hotshot /usr/local/bin/
 ```
 
-Then just run it:
+### Run it
+
+Either way, just run it:
 
 ```bash
 hotshot

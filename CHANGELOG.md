@@ -4,6 +4,10 @@ All notable changes to hotshot are documented in this file. The format is based 
 
 ## [Unreleased]
 
+### Added
+
+- Homebrew install via the `hivecommons/homebrew-hive` tap: `brew install hivecommons/hive/hotshot`; the README Install section now leads with it.
+
 ## [0.1.0] - 2026-10-23
 
 First tagged release. Full auto-generated notes are on the [GitHub Release](https://github.com/hivecommons/hotshot/releases/tag/v0.1.0).

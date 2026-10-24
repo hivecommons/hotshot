@@ -75,7 +75,6 @@ public enum DiagnosticEvent: String, CaseIterable {
 
     case screenshotInjectLast = "screenshot.inject_last"
     case screenshotNoTerminal = "screenshot.no_terminal"
-    case screenshotLocationLookupFailed = "screenshot.location_lookup_failed"
 
     case watcherStarted = "watcher.started"
     case watcherStopped = "watcher.stopped"

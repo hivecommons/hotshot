@@ -178,10 +178,11 @@ final class ProcessPipeDisciplineTests: XCTestCase {
                 XCTFail("\(file.name): \(violation)")
             }
         }
-        // commands(onTTY:) and macOSScreenshotLocation() are the two sites
-        // #241 fixed; the gate is vacuous if it stops seeing them.
+        // commands(onTTY:) is the remaining site #241 fixed (the
+        // macOSScreenshotLocation() fork was replaced by a CFPreferences read
+        // in #286); the gate is vacuous if it stops seeing it.
         XCTAssertGreaterThanOrEqual(
-            pipedSites, 2, "expected the known piped Process sites under Sources/ to be scanned")
+            pipedSites, 1, "expected the known piped Process site under Sources/ to be scanned")
     }
 
     func testEveryPipedProcessInTestsDrainsBeforeWaiting() throws {

@@ -87,13 +87,4 @@ final class DiagnosticEventTests: XCTestCase {
                 "\(file.name) logs a free-form NSLog line instead of diagnosticLine")
         }
     }
-
-    func testScreenshotLocationLookupFailureIsAWarnLine() {
-        XCTAssertEqual(
-            diagnosticLine(
-                event: DiagnosticEvent.screenshotLocationLookupFailed.rawValue,
-                severity: .warn,
-                detail: "boom"),
-            "Hotshot [WARN] screenshot.location_lookup_failed: boom")
-    }
 }

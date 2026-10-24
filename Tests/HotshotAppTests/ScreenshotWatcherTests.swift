@@ -479,6 +479,34 @@ final class ScreenshotWatcherTests: XCTestCase {
         XCTAssertEqual(events.filter { $0.event == "watcher.started" }.count, 1)
     }
 
+    func testReconcileKeepsOldWatchWhenNewFolderCannotBeOpened() throws {
+        let dirA = directory!
+        // A regular file as the parent makes the new path unopenable (ENOTDIR).
+        let blocker = try writeFile("not-a-directory", in: dirA)
+        let unopenable = (blocker as NSString).appendingPathComponent("screenshots")
+        var current = dirA
+        let watcher = makeWatcher(screenshotDirectory: { current })
+        let fired = expectation(description: "debounced check still injects from the old folder")
+        var injected: [String] = []
+        watcher.onNewScreenshot = {
+            injected.append($0)
+            fired.fulfill()
+        }
+
+        watcher.start()
+        defer { watcher.stop() }
+        current = unopenable
+        watcher.reconcileDirectory()
+
+        XCTAssertNil(events.first { $0.event == "watcher.directory_changed" })
+        XCTAssertEqual(events.filter { $0.event == "watcher.open_failed" }.map(\.path), [unopenable])
+        XCTAssertEqual(events.filter { $0.event == "watcher.started" }.map(\.path), [dirA])
+
+        let fresh = try writeFile("Screenshot 2026-10-15 at 10.00.02.png", in: dirA)
+        wait(for: [fired], timeout: WATCH_DEBOUNCE_SECONDS + 5)
+        XCTAssertEqual(injected, [fresh], "the old folder is still watched")
+    }
+
     func testReconcileWhenNotStartedIsANoOp() throws {
         var current = directory!
         let watcher = makeWatcher(screenshotDirectory: { current })

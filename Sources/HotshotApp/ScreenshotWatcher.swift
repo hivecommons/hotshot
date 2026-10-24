@@ -77,10 +77,20 @@ public final class ScreenshotWatcher {
 
     /// Re-binds the watch when the folder closure now names a different
     /// folder than the one the live fd is bound to; no-op when not watching.
+    /// The new folder is probed before the live watch is torn down, so a
+    /// folder that cannot be opened leaves the existing watch in place
+    /// (`watcher.open_failed` names the folder that was refused).
     public func reconcileDirectory() {
         guard source != nil else { return }
         let dir = directory
         guard dir != watchedDirectory else { return }
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let probe = open(dir, O_EVTONLY)
+        guard probe >= 0 else {
+            diagnostic(DiagnosticEvent.watcherOpenFailed.rawValue, .error, dir, nil)
+            return
+        }
+        close(probe)
         diagnostic(DiagnosticEvent.watcherDirectoryChanged.rawValue, .info, dir, nil)
         start()
     }

@@ -80,7 +80,9 @@ public enum DiagnosticEvent: String, CaseIterable {
     case watcherStarted = "watcher.started"
     case watcherStopped = "watcher.stopped"
     case watcherOpenFailed = "watcher.open_failed"
+    /// Verbose-only: the kqueue fired for any file activity in the watched folder.
     case watcherDirectoryChange = "watcher.directory_change"
+    /// The macOS screenshot location changed while watching; the watch was re-bound.
     case watcherDirectoryChanged = "watcher.directory_changed"
     case watcherNewFiles = "watcher.new_files"
     case watcherNewScreenshot = "watcher.new_screenshot"

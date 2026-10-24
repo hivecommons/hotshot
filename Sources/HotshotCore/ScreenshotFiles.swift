@@ -17,34 +17,17 @@ public func normalizedMacOSScreenshotLocation(_ path: String?) -> String? {
 }
 
 public func macOSScreenshotLocation() -> String {
-    // Same store `defaults read` prints, without forking a process.
+    // Authoritative: the same cfprefsd store `defaults read` prints, without
+    // forking a process. Synchronizing drops this process's cached copy so an
+    // external change is seen; an unset key goes straight to the fallback
+    // because this runs on the main run loop every
+    // WATCH_DIRECTORY_RECONCILE_SECONDS.
+    let domain = "com.apple.screencapture" as CFString
+    CFPreferencesAppSynchronize(domain)
     if let path = normalizedMacOSScreenshotLocation(
-        CFPreferencesCopyAppValue(
-            "location" as CFString, "com.apple.screencapture" as CFString) as? String)
+        CFPreferencesCopyAppValue("location" as CFString, domain) as? String)
     {
         return path
-    }
-    let task = Process()
-    task.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
-    task.arguments = ["read", "com.apple.screencapture", "location"]
-    let pipe = Pipe()
-    task.standardOutput = pipe
-    task.standardError = FileHandle.nullDevice
-    do {
-        try task.run()
-        // Drain before waiting: a child that fills the pipe buffer blocks
-        // on write and never exits while we sit in waitUntilExit.
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        task.waitUntilExit()
-        if let path = normalizedMacOSScreenshotLocation(String(data: data, encoding: .utf8)) {
-            return path
-        }
-    } catch {
-        NSLog(
-            diagnosticLine(
-                event: DiagnosticEvent.screenshotLocationLookupFailed.rawValue,
-                severity: .warn,
-                detail: "\(error.localizedDescription); falling back to ~/Desktop"))
     }
     return NSHomeDirectory() + "/Desktop"
 }

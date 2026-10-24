@@ -127,6 +127,24 @@ Describe 'Get-TargetCli' {
         Get-TargetCli 100 | Should -Be 'claude'
     }
 
+    It 'does not treat a quoted claude <x> directory argument as claude' {
+        $script:ChildName = 'copilot.exe'
+        $script:ChildCommandLine = 'copilot.exe --add-dir "C:\Users\me\claude projects"'
+        $script:GrandchildName = 'pwsh.exe'
+        $script:GrandchildCommandLine = 'pwsh'
+
+        Get-TargetCli 100 | Should -Be 'plain'
+    }
+
+    It 'returns unknown for a script under a quoted claude <x> directory' {
+        $script:ChildName = 'node.exe'
+        $script:ChildCommandLine = 'node "C:\Users\me\claude projects\tool.js"'
+        $script:GrandchildName = 'pwsh.exe'
+        $script:GrandchildCommandLine = 'pwsh'
+
+        Get-TargetCli 100 | Should -Be 'unknown'
+    }
+
     It 'returns unknown when Get-CimInstance yields no processes' {
         Mock Get-CimInstance -ModuleName HotshotCapture { @() }
 

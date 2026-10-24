@@ -35,7 +35,9 @@ public func injectionTarget(forBundleID bid: String) -> InjectionTarget {
 }
 
 /// Classify the commands running on a tty. Claude wins ties since the
-/// bracketed form was hotshot's historical default.
+/// bracketed form was hotshot's historical default. `ps -o command=` carries no
+/// argument boundaries, so a `claude <x>` directory inside an argument can
+/// still match here, unlike the Linux and Windows per-argument classifiers.
 public func classifyCommands(_ commands: [String]) -> TargetCLI? {
     var sawPlainPathCLI = false
     for cmd in commands {

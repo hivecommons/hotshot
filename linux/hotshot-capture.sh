@@ -221,10 +221,9 @@ descendants() { # $1 = root pid
 }
 
 classify_cli() { # $1 = root pid; echoes "claude" | "plain" | "unknown"
-    local saw_plain=0 pid comm cmd base
+    local saw_plain=0 pid comm tok leaf base
     while read -r pid; do
         comm="$(cat "/proc/$pid/comm" 2>/dev/null || true)"
-        cmd="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
         base="${comm##*/}"
         case "$base" in
             claude)
@@ -233,16 +232,18 @@ classify_cli() { # $1 = root pid; echoes "claude" | "plain" | "unknown"
                 ;;
             copilot | aider | opencode) saw_plain=1 ;;
         esac
-        # node/python-wrapped CLIs: look for the script name in the cmdline
-        case " $cmd" in
-            *[/\ ]claude | *[/\ ]claude\ *)
-                echo claude
-                return
-                ;;
-            *[/\ ]copilot | *[/\ ]copilot\ * | *[/\ ]aider | *[/\ ]aider\ * | *[/\ ]opencode | *[/\ ]opencode\ *)
-                saw_plain=1
-                ;;
-        esac
+        # node/python-wrapped CLIs: compare each argv token's leaf name, so a
+        # directory like "claude notes" inside one argument cannot match.
+        while IFS= read -r -d '' tok || [ -n "$tok" ]; do
+            leaf="${tok##*/}"
+            case "$leaf" in
+                claude)
+                    echo claude
+                    return
+                    ;;
+                copilot | aider | opencode) saw_plain=1 ;;
+            esac
+        done < <(cat "/proc/$pid/cmdline" 2>/dev/null || true)
     done < <(descendants "$1")
     [ "$saw_plain" = 1 ] && echo plain || echo unknown
 }

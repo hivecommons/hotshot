@@ -1300,6 +1300,22 @@ assert_eq "normalize_shot_dir: relative anchored to PWD" "$PWD/shots" "$(normali
 assert_eq "normalize_shot_dir: bare ~ is HOME" "/home/u" "$(HOME=/home/u normalize_shot_dir '~')"
 assert_eq "normalize_shot_dir: ~/x is under HOME" "/home/u/x" "$(HOME=/home/u normalize_shot_dir \~/x)"
 
+# A directory named "claude notes" inside one argument is not the claude CLI.
+CLAUDE_DIR_ARG="$TMP/home/me/claude notes/tool.js"
+setsid bash -c 'exec -a "$0" sleep 300' "$CLAUDE_DIR_ARG" >/dev/null 2>&1 &
+arg_root=$!
+CHILD_PIDS+=("$arg_root")
+sleep 0.3
+assert_eq "classify_cli: 'claude <x>' path component in an argument -> unknown" \
+    "unknown" "$(classify_cli "$arg_root")"
+
+setsid bash -c '"$1" 300 & exec -a "$0" sleep 300' "$CLAUDE_DIR_ARG" "$FAKEBIN/copilot" >/dev/null 2>&1 &
+arg_root=$!
+CHILD_PIDS+=("$arg_root")
+sleep 0.3
+assert_eq "classify_cli: copilot sibling of a 'claude <x>' argument -> plain" \
+    "plain" "$(classify_cli "$arg_root")"
+
 # ==============================================================================
 echo
 echo "$PASS passed, $FAIL failed"

@@ -81,6 +81,7 @@ public enum DiagnosticEvent: String, CaseIterable {
     case watcherStopped = "watcher.stopped"
     case watcherOpenFailed = "watcher.open_failed"
     case watcherDirectoryChange = "watcher.directory_change"
+    case watcherDirectoryChanged = "watcher.directory_changed"
     case watcherNewFiles = "watcher.new_files"
     case watcherNewScreenshot = "watcher.new_screenshot"
     case watcherQuarantinedSkipped = "watcher.quarantined_skipped"

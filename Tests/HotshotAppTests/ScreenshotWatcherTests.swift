@@ -432,4 +432,60 @@ final class ScreenshotWatcherTests: XCTestCase {
 
         XCTAssertEqual(injected, [fresh], "the watch still follows the folder it was started on")
     }
+
+    // MARK: - Follow external folder change (#286)
+
+    /// The macOS location default can change under a running watch; a
+    /// reconcile must re-bind to the new folder and drop the old one.
+    func testReconcileFollowsAChangedFolder() throws {
+        let dirA = directory!
+        let dirB = try makeDirectory().path
+        var current = dirA
+        let watcher = makeWatcher(screenshotDirectory: { current })
+        let fired = expectation(description: "debounced check injects the file in the new folder")
+        var injected: [String] = []
+        watcher.onNewScreenshot = {
+            injected.append($0)
+            fired.fulfill()
+        }
+
+        watcher.start()
+        defer { watcher.stop() }
+        current = dirB
+        watcher.reconcileDirectory()
+
+        let changed = events.filter { $0.event == "watcher.directory_changed" }
+        XCTAssertEqual(changed.map(\.path), [dirB])
+        XCTAssertEqual(changed.first?.severity, .info)
+        XCTAssertNil(changed.first?.count)
+        XCTAssertEqual(events.filter { $0.event == "watcher.started" }.map(\.path), [dirA, dirB])
+
+        try writeFile("Screenshot 2026-10-15 at 10.00.00.png", in: dirA)
+        let fresh = try writeFile("Screenshot 2026-10-15 at 10.00.01.png", in: dirB)
+
+        wait(for: [fired], timeout: WATCH_DEBOUNCE_SECONDS + 5)
+
+        XCTAssertEqual(injected, [fresh], "only the new folder is watched")
+    }
+
+    func testReconcileWithUnchangedFolderDoesNothing() {
+        let watcher = makeWatcher()
+
+        watcher.start()
+        defer { watcher.stop() }
+        watcher.reconcileDirectory()
+
+        XCTAssertNil(events.first { $0.event == "watcher.directory_changed" })
+        XCTAssertEqual(events.filter { $0.event == "watcher.started" }.count, 1)
+    }
+
+    func testReconcileWhenNotStartedIsANoOp() throws {
+        var current = directory!
+        let watcher = makeWatcher(screenshotDirectory: { current })
+
+        current = try makeDirectory().path
+        watcher.reconcileDirectory()
+
+        XCTAssertTrue(events.isEmpty)
+    }
 }

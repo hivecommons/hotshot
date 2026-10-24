@@ -14,6 +14,7 @@ Diagnostics are stable event names and severities. Set `HOTSHOT_VERBOSE_LOGGING=
 | Event | Meaning | Action |
 |---|---|---|
 | `watcher.open_failed` (error) | macOS could not open the screenshot directory, so nothing is watched. | Check the screenshot location exists and is readable (`defaults read com.apple.screencapture location`); restart hotshot. |
+| `watcher.directory_changed` (info) | The macOS screenshot location changed while watching, so the watch was re-bound to the new folder (path shown). | Not a fault. Expect a `watcher.started` for the same path right after it. |
 | `watcher.started` but no `watcher.new_screenshot` | Watching, but no new file matched. | Confirm the screenshot is saved to the watched directory, not the clipboard (clipboard mode uses `pasteboard.*` events). |
 | `pasteboard.read_failed`, `pasteboard.png_conversion_failed`, `pasteboard.write_failed`, `clipboard.save_failed` | Clipboard image could not be read, converted, saved or written back to the pasteboard. hotshot refuses to auto-paste an image it could not save. | Retake the screenshot; check free disk space and write access to the screenshot folder. |
 | `applescript.unavailable`, `applescript.error` (error) | macOS could not run the injection script. Most often Accessibility or Automation permission is missing or was revoked. | System Settings > Privacy & Security > Accessibility (and Automation): remove and re-add hotshot, then relaunch. |

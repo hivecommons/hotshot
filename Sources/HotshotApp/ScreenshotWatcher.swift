@@ -75,6 +75,16 @@ public final class ScreenshotWatcher {
         diagnostic("watcher.started", .info, dir, nil)
     }
 
+    /// Re-binds the watch when the folder closure now names a different
+    /// folder than the one the live fd is bound to; no-op when not watching.
+    public func reconcileDirectory() {
+        guard source != nil else { return }
+        let dir = directory
+        guard dir != watchedDirectory else { return }
+        diagnostic(DiagnosticEvent.watcherDirectoryChanged.rawValue, .info, dir, nil)
+        start()
+    }
+
     public func stop() {
         debounceTimer?.cancel()
         debounceTimer = nil

@@ -10,6 +10,7 @@ All notable changes to hotshot are documented in this file. The format is based 
 
 ### Fixed
 
+- Watch mode now follows an external change of the macOS screenshot location instead of staying on the old folder, and reading that location no longer forks `defaults` on every lookup.
 - A focus-lost or refused-filename injection now posts only its own notification instead of also telling you to re-allow Automation.
 
 ## [0.1.0] - 2026-10-23

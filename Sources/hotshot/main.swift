@@ -196,6 +196,11 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if clipboardWatch {
             startWatchingClipboard()
         }
+        Timer.scheduledTimer(
+            withTimeInterval: WATCH_DIRECTORY_RECONCILE_SECONDS, repeats: true
+        ) { [weak self] _ in
+            self?.screenshotWatcher.reconcileDirectory()
+        }
     }
 
     // MARK: - Status Bar
@@ -234,6 +239,7 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func menuWillOpen(_ menu: NSMenu) {
+        screenshotWatcher.reconcileDirectory()
         targetTracker.menuWillOpen { self.seedTargetFromRunningApps(logPrefix: "menuWillOpen") }
     }
 
@@ -277,10 +283,12 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func stopWatchingClipboard() { clipboardWatcher.stop() }
 
     func handleClipboardImage(changeCount: Int) {
+        screenshotWatcher.reconcileDirectory()
         injectionCoordinator.clipboardImageDetected(changeCount: changeCount)
     }
 
     @objc func injectLastScreenshot() {
+        screenshotWatcher.reconcileDirectory()
         injectionCoordinator.injectLastScreenshot(dir: (screenshotDir as NSString).expandingTildeInPath)
     }
 

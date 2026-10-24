@@ -1,6 +1,20 @@
 import AppKit
 import HotshotCore
 
+/// What an injection attempt did, so callers post exactly one notification.
+public enum InjectionResult: Equatable {
+    /// The text was typed / the paste was sent.
+    case injected
+    /// AppleScript failed or was unavailable (typically missing Automation
+    /// permission); the injector has not told the user.
+    case failed
+    /// Deliberately not injected (focus lost, or a refused filename); the
+    /// injector has already notified the user.
+    case refused
+
+    public var isInjected: Bool { self == .injected }
+}
+
 /// Result of running one AppleScript source through a `ScriptRunner`.
 /// Mirrors the three things `NSAppleScript` can tell us, so tests can drive
 /// every `TerminalInjector` branch without Automation permission.
@@ -120,7 +134,7 @@ public final class TerminalInjector {
     }
 
     @discardableResult
-    public func sendCtrlV(terminalBundleID bid: String, terminalName: String?) -> Bool {
+    public func sendCtrlV(terminalBundleID bid: String, terminalName: String?) -> InjectionResult {
         let script = ctrlVScript(bundleID: bid)
         NSLog(
             diagnosticLine(
@@ -130,7 +144,7 @@ public final class TerminalInjector {
     }
 
     @discardableResult
-    public func injectPath(_ path: String, terminalBundleID bid: String) -> Bool {
+    public func injectPath(_ path: String, terminalBundleID bid: String) -> InjectionResult {
         let targetCLI = detectTargetCLI(terminalBundleID: bid)
         guard let text = typedScreenshotText(path: path, targetCLI: targetCLI) else {
             if containsControlCharacters(path) {
@@ -144,7 +158,7 @@ public final class TerminalInjector {
                     title: "Hotshot",
                     body: "Refused to inject a file whose name contains shell metacharacters")
             }
-            return false
+            return .refused
         }
         // Load the pasteboard with image + file URL + plain-text path so
         // CLIs that read the clipboard (GitHub Copilot CLI via ⌘V, Claude
@@ -162,26 +176,27 @@ public final class TerminalInjector {
         }
     }
 
-    func injectViaITerm2(_ path: String) -> Bool {
+    func injectViaITerm2(_ path: String) -> InjectionResult {
         let script = iterm2InjectionScript(text: path, autoReturn: autoReturn(), autoFocus: autoFocus())
         diagnostic("injection.iterm2", .info, path, nil, nil)
         if verboseDiagnostics() {
             diagnostic("injection.iterm2.script", .info, nil, script, nil)
         }
-        return runAppleScript(script)
+        return runAppleScript(script) ? .injected : .failed
     }
 
-    func injectViaGenericAppleScript(_ path: String, bundleID: String) -> Bool {
+    func injectViaGenericAppleScript(_ path: String, bundleID: String) -> InjectionResult {
         return runFocusGuardedAppleScript(
             genericInjectionScript(text: path, bundleID: bundleID, autoReturn: autoReturn()))
     }
 
     /// Run a System Events script that may return `FOCUS_LOST_RESULT`
     /// instead of typing (see `focusGuardLine`). Focus loss is reported like
-    /// the filename refusals: a warn diagnostic, a notification, and `false`,
-    /// so the coordinator never claims the path was injected. The screenshot
+    /// the filename refusals: a warn diagnostic, a notification, and `.refused`,
+    /// so the coordinator neither claims the path was injected nor adds the
+    /// Automation advice. The screenshot
     /// is already saved and on the pasteboard by then.
-    func runFocusGuardedAppleScript(_ source: String) -> Bool {
+    func runFocusGuardedAppleScript(_ source: String) -> InjectionResult {
         let outcome = scriptRunner(source)
         if case .success(let value) = outcome, value == FOCUS_LOST_RESULT {
             diagnostic(
@@ -189,9 +204,9 @@ public final class TerminalInjector {
             showNotification(
                 title: "Hotshot",
                 body: "Terminal did not come to the front \u{2014} nothing typed; screenshot saved and on the clipboard")
-            return false
+            return .refused
         }
-        return report(outcome)
+        return report(outcome) ? .injected : .failed
     }
 
     public func focusTerminal(bundleID: String) {

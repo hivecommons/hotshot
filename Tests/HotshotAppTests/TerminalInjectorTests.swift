@@ -93,7 +93,7 @@ final class TerminalInjectorTests: XCTestCase {
         let injected = injector.injectPath(
             "/Users/me/Desktop/shot\u{000A}rm -rf.png", terminalBundleID: "com.example.unknown")
 
-        XCTAssertFalse(injected)
+        XCTAssertEqual(injected, .refused)
         XCTAssertEqual(loadedPaths, [], "a refused path must never reach the pasteboard")
         let refusal = events.first { $0.event == "injection.control_chars_refused" }
         XCTAssertNotNil(refusal)
@@ -134,7 +134,7 @@ final class TerminalInjectorTests: XCTestCase {
             outcome: ttyThen("/dev/ttys003"),
             ttyCommands: { _ in ["-zsh", "claude"] })
 
-        XCTAssertTrue(injector.injectPath(screenshot, terminalBundleID: iterm2))
+        XCTAssertEqual(injector.injectPath(screenshot, terminalBundleID: iterm2), .injected)
 
         XCTAssertEqual(ttyLookups, ["ttys003"], "the tty basename is what ps is asked about")
         XCTAssertEqual(loadedPaths, [screenshot])
@@ -158,7 +158,7 @@ final class TerminalInjectorTests: XCTestCase {
             outcome: ttyThen("/dev/ttys003"),
             ttyCommands: { _ in ["/usr/local/bin/copilot"] })
 
-        XCTAssertTrue(injector.injectPath(spaced, terminalBundleID: iterm2))
+        XCTAssertEqual(injector.injectPath(spaced, terminalBundleID: iterm2), .injected)
 
         let expected = shellEscapedPath(spaced) + " "
         XCTAssertEqual(
@@ -175,7 +175,7 @@ final class TerminalInjectorTests: XCTestCase {
                 return ["copilot"]
             })
 
-        XCTAssertTrue(injector.injectPath(screenshot, terminalBundleID: iterm2))
+        XCTAssertEqual(injector.injectPath(screenshot, terminalBundleID: iterm2), .injected)
 
         XCTAssertFalse(lookedUp, "no tty means no ps lookup")
         XCTAssertEqual(
@@ -187,7 +187,7 @@ final class TerminalInjectorTests: XCTestCase {
     func testInjectPathFallsBackToClaudeWhenTTYIsEmpty() {
         let injector = makeInjector(outcome: ttyThen(""), ttyCommands: { _ in ["copilot"] })
 
-        XCTAssertTrue(injector.injectPath(screenshot, terminalBundleID: iterm2))
+        XCTAssertEqual(injector.injectPath(screenshot, terminalBundleID: iterm2), .injected)
 
         XCTAssertEqual(ttyLookups, [])
         XCTAssertEqual(
@@ -203,7 +203,7 @@ final class TerminalInjectorTests: XCTestCase {
             outcome: ttyThen("/dev/ttys001"),
             ttyCommands: { _ in ["-bash"] })
 
-        XCTAssertTrue(injector.injectPath(screenshot, terminalBundleID: terminal))
+        XCTAssertEqual(injector.injectPath(screenshot, terminalBundleID: terminal), .injected)
 
         XCTAssertEqual(ttyLookups, ["ttys001"])
         XCTAssertEqual(
@@ -219,7 +219,7 @@ final class TerminalInjectorTests: XCTestCase {
     func testInjectPathIntoUnscriptableTerminalSkipsTheTTYQuery() {
         let injector = makeInjector(ttyCommands: { _ in ["copilot"] })
 
-        XCTAssertTrue(injector.injectPath(screenshot, terminalBundleID: "com.example.unknown"))
+        XCTAssertEqual(injector.injectPath(screenshot, terminalBundleID: "com.example.unknown"), .injected)
 
         XCTAssertEqual(ttyLookups, [], "no tty script exists, so ps is never consulted")
         XCTAssertEqual(
@@ -235,7 +235,7 @@ final class TerminalInjectorTests: XCTestCase {
     func testInjectPathReportsAppleScriptErrorDetail() {
         let injector = makeInjector(outcome: ttyThen(nil, rest: .failure("-1743 not authorized")))
 
-        XCTAssertFalse(injector.injectPath(screenshot, terminalBundleID: iterm2))
+        XCTAssertEqual(injector.injectPath(screenshot, terminalBundleID: iterm2), .failed)
 
         XCTAssertEqual(loadedPaths, [screenshot], "the pasteboard is loaded before the script runs")
         let failure = events.first { $0.event == "applescript.error" }
@@ -247,7 +247,7 @@ final class TerminalInjectorTests: XCTestCase {
     func testInjectPathReportsUnavailableWhenScriptDoesNotCompile() {
         let injector = makeInjector(outcome: ttyThen(nil, rest: .unavailable))
 
-        XCTAssertFalse(injector.injectPath(screenshot, terminalBundleID: terminal))
+        XCTAssertEqual(injector.injectPath(screenshot, terminalBundleID: terminal), .failed)
 
         let failure = events.first { $0.event == "applescript.unavailable" }
         XCTAssertEqual(failure?.severity, .error)
@@ -260,8 +260,8 @@ final class TerminalInjectorTests: XCTestCase {
     func testRefusalNotifiesWhenNotificationsAreEnabled() {
         let injector = makeInjector(notificationsEnabled: true)
 
-        XCTAssertFalse(
-            injector.injectPath("/Users/me/Desktop/bad\u{0007}.png", terminalBundleID: iterm2))
+        XCTAssertEqual(
+            injector.injectPath("/Users/me/Desktop/bad\u{0007}.png", terminalBundleID: iterm2), .refused)
 
         XCTAssertEqual(loadedPaths, [])
         XCTAssertEqual(
@@ -277,8 +277,8 @@ final class TerminalInjectorTests: XCTestCase {
     func testInjectPathRefusesShellMetacharactersInTheBracketedFallback() {
         let injector = makeInjector(notificationsEnabled: true, ttyCommands: { _ in [] })
 
-        XCTAssertFalse(
-            injector.injectPath("/Users/me/Desktop/$(touch pwned).png", terminalBundleID: "com.example.unknown"))
+        XCTAssertEqual(
+            injector.injectPath("/Users/me/Desktop/$(touch pwned).png", terminalBundleID: "com.example.unknown"), .refused)
 
         XCTAssertEqual(loadedPaths, [])
         let refusal = events.first { $0.event == "injection.shell_metachars_refused" }
@@ -298,7 +298,7 @@ final class TerminalInjectorTests: XCTestCase {
         let injector = makeInjector(
             outcome: ttyThen("/dev/ttys003"), ttyCommands: { _ in ["aider"] })
 
-        XCTAssertTrue(injector.injectPath(dollar, terminalBundleID: iterm2))
+        XCTAssertEqual(injector.injectPath(dollar, terminalBundleID: iterm2), .injected)
 
         XCTAssertEqual(loadedPaths, [dollar])
         XCTAssertEqual(
@@ -314,7 +314,7 @@ final class TerminalInjectorTests: XCTestCase {
             verboseDiagnostics: true,
             outcome: ttyThen(nil, rest: .success("done")))
 
-        XCTAssertTrue(injector.injectPath(screenshot, terminalBundleID: iterm2))
+        XCTAssertEqual(injector.injectPath(screenshot, terminalBundleID: iterm2), .injected)
 
         XCTAssertEqual(eventNames, ["injection.iterm2", "injection.iterm2.script", "applescript.result"])
         let logged = events.first { $0.event == "injection.iterm2.script" }
@@ -340,7 +340,7 @@ final class TerminalInjectorTests: XCTestCase {
     func testSendCtrlVRunsTheCtrlVScriptForTheBundle() {
         let injector = makeInjector()
 
-        XCTAssertTrue(injector.sendCtrlV(terminalBundleID: terminal, terminalName: "Terminal"))
+        XCTAssertEqual(injector.sendCtrlV(terminalBundleID: terminal, terminalName: "Terminal"), .injected)
 
         XCTAssertEqual(scripts, [ctrlVScript(bundleID: terminal)])
         XCTAssertEqual(eventNames, [])
@@ -349,7 +349,7 @@ final class TerminalInjectorTests: XCTestCase {
     func testSendCtrlVPropagatesAppleScriptFailure() {
         let injector = makeInjector(outcome: { _ in .failure("System Events denied") })
 
-        XCTAssertFalse(injector.sendCtrlV(terminalBundleID: terminal, terminalName: nil))
+        XCTAssertEqual(injector.sendCtrlV(terminalBundleID: terminal, terminalName: nil), .failed)
 
         XCTAssertEqual(events.first { $0.event == "applescript.error" }?.detail, "System Events denied")
     }
@@ -362,7 +362,7 @@ final class TerminalInjectorTests: XCTestCase {
             outcome: ttyThen("/dev/ttys001", rest: .success(FOCUS_LOST_RESULT)),
             ttyCommands: { _ in ["-zsh"] })
 
-        XCTAssertFalse(injector.injectPath(screenshot, terminalBundleID: terminal))
+        XCTAssertEqual(injector.injectPath(screenshot, terminalBundleID: terminal), .refused)
 
         XCTAssertEqual(loadedPaths, [screenshot], "the screenshot is still saved on the pasteboard")
         let focusLost = events.first { $0.event == "injection.focus_lost" }
@@ -381,7 +381,7 @@ final class TerminalInjectorTests: XCTestCase {
     func testFocusLossStaysSilentWhenNotificationsAreDisabled() {
         let injector = makeInjector(outcome: { _ in .success(FOCUS_LOST_RESULT) })
 
-        XCTAssertFalse(injector.injectPath(screenshot, terminalBundleID: "com.example.unknown"))
+        XCTAssertEqual(injector.injectPath(screenshot, terminalBundleID: "com.example.unknown"), .refused)
 
         XCTAssertEqual(eventNames, ["injection.focus_lost"])
         XCTAssertEqual(
@@ -395,7 +395,7 @@ final class TerminalInjectorTests: XCTestCase {
     func testSendCtrlVRefusesWhenTheTerminalIsNotFrontmost() {
         let injector = makeInjector(outcome: { _ in .success(FOCUS_LOST_RESULT) })
 
-        XCTAssertFalse(injector.sendCtrlV(terminalBundleID: terminal, terminalName: "Terminal"))
+        XCTAssertEqual(injector.sendCtrlV(terminalBundleID: terminal, terminalName: "Terminal"), .refused)
 
         XCTAssertEqual(scripts, [ctrlVScript(bundleID: terminal)])
         XCTAssertEqual(eventNames, ["injection.focus_lost"])
@@ -404,8 +404,8 @@ final class TerminalInjectorTests: XCTestCase {
     func testAnyOtherScriptResultStillCountsAsInjected() {
         let injector = makeInjector(verboseDiagnostics: true, outcome: { _ in .success("typed") })
 
-        XCTAssertTrue(injector.sendCtrlV(terminalBundleID: terminal, terminalName: nil))
-        XCTAssertTrue(injector.injectPath(screenshot, terminalBundleID: "com.example.unknown"))
+        XCTAssertEqual(injector.sendCtrlV(terminalBundleID: terminal, terminalName: nil), .injected)
+        XCTAssertEqual(injector.injectPath(screenshot, terminalBundleID: "com.example.unknown"), .injected)
 
         XCTAssertEqual(eventNames, ["applescript.result", "applescript.result"])
     }
@@ -417,7 +417,7 @@ final class TerminalInjectorTests: XCTestCase {
             outcome: ttyThen("/dev/ttys001", rest: .success(FOCUS_LOST_RESULT)),
             ttyCommands: { _ in ["claude"] })
 
-        XCTAssertTrue(injector.injectPath(screenshot, terminalBundleID: iterm2))
+        XCTAssertEqual(injector.injectPath(screenshot, terminalBundleID: iterm2), .injected)
 
         XCTAssertFalse(eventNames.contains("injection.focus_lost"))
     }

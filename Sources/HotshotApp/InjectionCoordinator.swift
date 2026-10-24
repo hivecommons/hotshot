@@ -62,6 +62,8 @@ public final class InjectionCoordinator {
         case noScreenshot(dir: String)
         case injected(successBody: String)
         case failed
+        /// Refused and already explained by the injector; no extra notification.
+        case refused
     }
 
     public typealias Diagnostic = (
@@ -72,8 +74,8 @@ public final class InjectionCoordinator {
     private let enrichClipboard: () -> String?
     private let hasClipboardImage: () -> Bool
     private let mostRecentScreenshot: (String) -> String?
-    private let sendCtrlV: (_ bundleID: String, _ name: String?) -> Bool
-    private let injectPath: (_ path: String, _ bundleID: String) -> Bool
+    private let sendCtrlV: (_ bundleID: String, _ name: String?) -> InjectionResult
+    private let injectPath: (_ path: String, _ bundleID: String) -> InjectionResult
     private let focusTerminal: (_ bundleID: String) -> Void
     private let autoFocus: () -> Bool
     private let notify: (_ body: String) -> Void
@@ -95,8 +97,8 @@ public final class InjectionCoordinator {
         enrichClipboard: @escaping () -> String?,
         hasClipboardImage: @escaping () -> Bool,
         mostRecentScreenshot: @escaping (String) -> String? = findMostRecentScreenshot(in:),
-        sendCtrlV: @escaping (_ bundleID: String, _ name: String?) -> Bool,
-        injectPath: @escaping (_ path: String, _ bundleID: String) -> Bool,
+        sendCtrlV: @escaping (_ bundleID: String, _ name: String?) -> InjectionResult,
+        injectPath: @escaping (_ path: String, _ bundleID: String) -> InjectionResult,
         focusTerminal: @escaping (_ bundleID: String) -> Void,
         autoFocus: @escaping () -> Bool,
         notify: @escaping (_ body: String) -> Void,
@@ -145,9 +147,9 @@ public final class InjectionCoordinator {
             return .noTarget
         }
 
-        let injected = sendCtrlV(target.bundleID, target.name)
+        let result = sendCtrlV(target.bundleID, target.name)
         return completeInjection(
-            injected, successBody: "Clipboard image injected via Ctrl-V", bundleID: target.bundleID)
+            result, successBody: "Clipboard image injected via Ctrl-V", bundleID: target.bundleID)
     }
 
     /// "Inject clipboard image (Ctrl-V)" menu action.
@@ -172,9 +174,9 @@ public final class InjectionCoordinator {
             notify("Could not save the clipboard image \u{2014} paste skipped")
             return .untrustedClipboard
         }
-        let injected = sendCtrlV(target.bundleID, target.name)
+        let result = sendCtrlV(target.bundleID, target.name)
         return completeInjection(
-            injected, successBody: "Clipboard image injected via Ctrl-V", bundleID: target.bundleID)
+            result, successBody: "Clipboard image injected via Ctrl-V", bundleID: target.bundleID)
     }
 
     /// "Inject last screenshot" menu action. `dir` is already tilde-expanded.
@@ -191,9 +193,9 @@ public final class InjectionCoordinator {
         }
 
         diagnostic("screenshot.inject_last", .info, latest)
-        let injected = injectPath(latest, target.bundleID)
+        let result = injectPath(latest, target.bundleID)
         return completeInjection(
-            injected, successBody: "Injected \u{2192} \(latest)", bundleID: target.bundleID)
+            result, successBody: "Injected \u{2192} \(latest)", bundleID: target.bundleID)
     }
 
     /// A new screenshot file appeared (`ScreenshotWatcher.onNewScreenshot`).
@@ -208,24 +210,33 @@ public final class InjectionCoordinator {
             return .noTarget
         }
 
-        let injected = injectPath(path, target.bundleID)
+        let result = injectPath(path, target.bundleID)
         return completeInjection(
-            injected,
+            result,
             successBody: "Auto-injected \u{2192} \((path as NSString).lastPathComponent)",
             bundleID: target.bundleID)
     }
 
     /// Shared tail of every injection call site: focus the terminal (when
     /// `autoFocus` is on) and post a notification — `successBody` on
-    /// success, or the shared `INJECTION_FAILED_NOTIFICATION_BODY` on
-    /// failure.
+    /// success, or the shared `INJECTION_FAILED_NOTIFICATION_BODY` on a
+    /// genuine failure. A refused injection (focus lost, bad filename) was
+    /// already explained by the injector, so nothing more is posted.
     @discardableResult
-    func completeInjection(_ injected: Bool, successBody: String, bundleID: String) -> Outcome {
+    func completeInjection(_ result: InjectionResult, successBody: String, bundleID: String) -> Outcome {
         if autoFocus() {
             focusTerminal(bundleID)
         }
-        notify(injected ? successBody : INJECTION_FAILED_NOTIFICATION_BODY)
-        return injected ? .injected(successBody: successBody) : .failed
+        switch result {
+        case .injected:
+            notify(successBody)
+            return .injected(successBody: successBody)
+        case .failed:
+            notify(INJECTION_FAILED_NOTIFICATION_BODY)
+            return .failed
+        case .refused:
+            return .refused
+        }
     }
 
     /// Where a seeded target came from, so the caller can log it.

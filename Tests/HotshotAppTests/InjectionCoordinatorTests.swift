@@ -28,7 +28,7 @@ final class InjectionCoordinatorTests: XCTestCase {
         enriched: String? = "/shots/clip.png",
         hasImage: Bool = true,
         latest: String? = "/shots/latest.png",
-        injectResult: Bool = true,
+        injectResult: InjectionResult = .injected,
         autoFocus: Bool = false
     ) -> InjectionCoordinator {
         InjectionCoordinator(
@@ -216,10 +216,20 @@ final class InjectionCoordinatorTests: XCTestCase {
     }
 
     func testCompleteInjectionFailureUsesSharedFailedBody() {
-        let coordinator = makeCoordinator(target: terminal, injectResult: false, autoFocus: true)
+        let coordinator = makeCoordinator(target: terminal, injectResult: .failed, autoFocus: true)
 
         XCTAssertEqual(coordinator.clipboardImageDetected(changeCount: 1), .failed)
         XCTAssertEqual(notifications, [INJECTION_FAILED_NOTIFICATION_BODY])
+        XCTAssertTrue(calls.contains("focus:com.googlecode.iterm2"))
+    }
+
+    func testRefusedInjectionPostsNoExtraNotificationButStillFocuses() {
+        let coordinator = makeCoordinator(target: terminal, injectResult: .refused, autoFocus: true)
+
+        XCTAssertEqual(coordinator.newScreenshot("/shots/a.png"), .refused)
+        XCTAssertEqual(coordinator.injectLastScreenshot(dir: "/shots"), .refused)
+        XCTAssertEqual(coordinator.clipboardImageDetected(changeCount: 1), .refused)
+        XCTAssertEqual(notifications, [], "the injector already notified; no Automation advice")
         XCTAssertTrue(calls.contains("focus:com.googlecode.iterm2"))
     }
 
@@ -227,10 +237,10 @@ final class InjectionCoordinatorTests: XCTestCase {
         let coordinator = makeCoordinator(target: terminal)
 
         XCTAssertEqual(
-            coordinator.completeInjection(true, successBody: "ok", bundleID: "b"),
+            coordinator.completeInjection(.injected, successBody: "ok", bundleID: "b"),
             .injected(successBody: "ok"))
         XCTAssertEqual(
-            coordinator.completeInjection(false, successBody: "ok", bundleID: "b"), .failed)
+            coordinator.completeInjection(.failed, successBody: "ok", bundleID: "b"), .failed)
         XCTAssertEqual(notifications, ["ok", INJECTION_FAILED_NOTIFICATION_BODY])
     }
 

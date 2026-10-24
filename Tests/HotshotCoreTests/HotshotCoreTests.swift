@@ -353,8 +353,8 @@ final class HotshotCoreTests: XCTestCase {
     }
 
     func testMacOSScreenshotLocationReturnsNormalizedAbsolutePath() {
-        // Exercises the real `defaults read com.apple.screencapture location`
-        // lookup. Whether or not the key is set on this machine, the result
+        // Exercises the real CFPreferences lookup of `com.apple.screencapture`
+        // key `location`. Whether or not the key is set on this machine, the result
         // must be an absolute path that normalization leaves untouched.
         let location = macOSScreenshotLocation()
         XCTAssertFalse(location.isEmpty)

@@ -10,6 +10,7 @@ All notable changes to hotshot are documented in this file. The format is based 
 
 ### Fixed
 
+- Windows: `Get-TargetCli` no longer classifies `CLAUDE.md` or a `claude\` path segment in a child command line as the claude CLI (#290).
 - Watch mode now follows an external change of the macOS screenshot location instead of staying on the old folder, and reading that location no longer forks `defaults` on every lookup.
 - A focus-lost or refused-filename injection now posts only its own notification instead of also telling you to re-allow Automation.
 

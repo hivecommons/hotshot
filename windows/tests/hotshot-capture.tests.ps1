@@ -53,6 +53,42 @@ Describe 'Get-TargetCli' {
         Get-TargetCli 100 | Should -Be 'claude'
     }
 
+    It 'does not treat a CLAUDE.md document argument as the claude CLI' {
+        $script:ChildName = 'copilot.exe'
+        $script:ChildCommandLine = 'copilot'
+        $script:GrandchildName = 'cmd.exe'
+        $script:GrandchildCommandLine = 'type CLAUDE.md'
+
+        Get-TargetCli 100 | Should -Be 'plain'
+    }
+
+    It 'does not treat a claude path segment as the claude CLI' {
+        $script:ChildName = 'node.exe'
+        $script:ChildCommandLine = 'node C:\Users\bob\claude\tool.js'
+        $script:GrandchildName = 'conhost.exe'
+        $script:GrandchildCommandLine = 'conhost'
+
+        Get-TargetCli 100 | Should -Be 'unknown'
+    }
+
+    It 'does not treat a copilot.md argument as a plain CLI' {
+        $script:ChildName = 'vim.exe'
+        $script:ChildCommandLine = 'vim copilot.md'
+        $script:GrandchildName = 'conhost.exe'
+        $script:GrandchildCommandLine = 'conhost'
+
+        Get-TargetCli 100 | Should -Be 'unknown'
+    }
+
+    It 'does not treat a copilot path segment as a plain CLI' {
+        $script:ChildName = 'run.exe'
+        $script:ChildCommandLine = 'C:\projects\copilot\run.exe'
+        $script:GrandchildName = 'conhost.exe'
+        $script:GrandchildCommandLine = 'conhost'
+
+        Get-TargetCli 100 | Should -Be 'unknown'
+    }
+
     It 'returns unknown when no known CLI is found' {
         $script:ChildName = 'pwsh.exe'
         $script:ChildCommandLine = 'pwsh'

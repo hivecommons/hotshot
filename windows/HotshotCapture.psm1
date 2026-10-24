@@ -31,9 +31,9 @@ function Get-TargetCli {
         foreach ($pr in $proc) {
             $name = if ($pr.Name) { $pr.Name.ToLower() } else { '' }
             $cmd = if ($pr.CommandLine) { $pr.CommandLine.ToLower() } else { '' }
-            if ($name -eq 'claude.exe' -or $cmd -match '[\\/ "]claude(-code)?(\.\w+)?("|[\\/ ]|$)') { return 'claude' }
+            if ($name -eq 'claude.exe' -or $cmd -match '[\\/ "]claude(-code)?(\.(exe|cmd|bat|ps1|m?js|cjs))?("| |$)') { return 'claude' }
             if ($name -in @('copilot.exe', 'aider.exe', 'opencode.exe') -or
-                $cmd -match '[\\/ "](copilot|aider|opencode)(\.\w+)?("|[\\/ ]|$)') { $sawPlain = $true }
+                $cmd -match '[\\/ "](copilot|aider|opencode)(\.(exe|cmd|bat|ps1|m?js|cjs))?("| |$)') { $sawPlain = $true }
         }
         $kids = $byParent["$p"]
         if ($kids) { foreach ($k in $kids) { $queue.Enqueue([uint32]$k.ProcessId) } }

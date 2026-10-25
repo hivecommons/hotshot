@@ -31,7 +31,18 @@ public func trustedEnrichedClipboardPath(
     fileExists: (String) -> Bool
 ) -> String? {
     guard let text, !containsControlCharacters(text) else { return nil }
-    let unescaped = text.replacingOccurrences(of: "\\", with: "")
+    // A backslash escapes the next character (a literal backslash is `\\`),
+    // so only the escape prefixes are dropped, not every backslash.
+    var unescaped = ""
+    var escaping = false
+    for ch in text {
+        if ch == "\\" && !escaping {
+            escaping = true
+        } else {
+            unescaped.append(ch)
+            escaping = false
+        }
+    }
     guard text == shellEscapedPath(unescaped) else { return nil }
     let dir = ((screenshotDirectory as NSString).expandingTildeInPath as NSString)
         .standardizingPath

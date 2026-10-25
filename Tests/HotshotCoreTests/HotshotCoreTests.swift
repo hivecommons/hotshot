@@ -578,6 +578,14 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertTrue(isHotshotSavedFileName("hotshot-20260930-120000-123-2.png"))
     }
 
+    func testTrustedEnrichedClipboardPathAcceptsDirectoryContainingBackslash() {
+        XCTAssertEqual(
+            trustedEnrichedClipboardPath(
+                "/Users/me/my\\\\dir/hotshot-1.png", screenshotDirectory: "/Users/me/my\\dir"
+            ) { $0 == "/Users/me/my\\dir/hotshot-1.png" },
+            "/Users/me/my\\\\dir/hotshot-1.png")
+    }
+
     func testTrustedEnrichedClipboardPathRequiresCanonicalEscapedForm() {
         // writePasteboard stores shellEscapedPath(path); text in any other
         // form was not written by hotshot. The unescaped spelling of a path

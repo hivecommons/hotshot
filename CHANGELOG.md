@@ -11,6 +11,7 @@ All notable changes to hotshot are documented in this file. The format is based 
 
 ### Fixed
 
+- macOS: hotshot now recognises its own enriched clipboard text when the screenshot folder path contains a backslash, instead of saving a duplicate PNG each time (#301).
 - Linux and Windows: when a terminal process tree runs both claude and a plain-path CLI (multi-tab terminal servers), classification now returns the escaped bare path instead of the bracketed claude format (#294).
 - Windows: `Get-TargetCli` no longer classifies `CLAUDE.md` or a `claude\` path segment in a child command line as the claude CLI (#290).
 - Linux and Windows: target classification now matches CLI names per command-line argument, so a `claude <x>` path component no longer selects the claude format (#292).

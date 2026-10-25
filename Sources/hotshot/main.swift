@@ -113,6 +113,10 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             autoWatch: autoWatch, clipboardWatch: clipboardWatch)
     }
 
+    var screenshotDirIsOverridden: Bool {
+        UserDefaults.standard.string(forKey: PREF_SCREENSHOT_DIR) != nil
+    }
+
     var screenshotDir: String {
         get { UserDefaults.standard.string(forKey: PREF_SCREENSHOT_DIR) ?? macOSScreenshotLocation() }
         set { UserDefaults.standard.set(newValue, forKey: PREF_SCREENSHOT_DIR) }
@@ -232,7 +236,9 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func rebuildMenu() {
         let menu = MenuModel.makeMenu(
-            items: MenuModel.items(prefs: menuPrefs, screenshotDir: screenshotDir))
+            items: MenuModel.items(
+                prefs: menuPrefs, screenshotDir: screenshotDir,
+                screenshotDirIsOverridden: screenshotDirIsOverridden))
         menu.delegate = self
         statusItem.menu = menu
         updateTargetLabel()
@@ -317,6 +323,13 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 autoWatch: autoWatch, watchers: watcherControls)
             rebuildMenu()
         }
+    }
+
+    @objc func useDefaultScreenshotDir() {
+        UserDefaults.standard.removeObject(forKey: PREF_SCREENSHOT_DIR)
+        MenuModel.applyScreenshotDirectoryChange(
+            autoWatch: autoWatch, watchers: watcherControls)
+        rebuildMenu()
     }
 
     func updateTargetLabel() {

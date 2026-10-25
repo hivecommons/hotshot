@@ -6,6 +6,7 @@ All notable changes to hotshot are documented in this file. The format is based 
 
 ### Added
 
+- Menu action "Use macOS default folder" (shown while a custom screenshot folder is set) reverts the override, and the `Save to:` line now says whether the folder is the macOS default or custom (#297).
 - Homebrew install via the `hivecommons/homebrew-hive` tap: `brew install hivecommons/hive/hotshot`; the README Install section now leads with it.
 
 ### Fixed

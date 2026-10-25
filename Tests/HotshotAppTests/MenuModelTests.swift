@@ -12,8 +12,10 @@ final class MenuModelTests: XCTestCase {
         autoFocus: false, autoReturn: false, notifications: false, autoWatch: false,
         clipboardWatch: false)
 
-    private func items(_ prefs: MenuPrefs, dir: String = "~/Desktop") -> [MenuModel.Item] {
-        MenuModel.items(prefs: prefs, screenshotDir: dir)
+    private func items(
+        _ prefs: MenuPrefs, dir: String = "~/Desktop", overridden: Bool = true
+    ) -> [MenuModel.Item] {
+        MenuModel.items(prefs: prefs, screenshotDir: dir, screenshotDirIsOverridden: overridden)
     }
 
     private func item(_ action: MenuAction, in items: [MenuModel.Item]) -> MenuModel.Item? {
@@ -28,7 +30,7 @@ final class MenuModelTests: XCTestCase {
             titles,
             [
                 "Target: none",
-                "Save to: ~/Desktop",
+                "Save to: ~/Desktop (custom)",
                 "---",
                 "Auto-focus terminal after paste",
                 "Auto-press Return after paste",
@@ -40,6 +42,7 @@ final class MenuModelTests: XCTestCase {
                 "Inject clipboard image (Ctrl-V)",
                 "---",
                 "Change screenshot folder\u{2026}",
+                "Use macOS default folder",
                 "---",
                 "Quit Hotshot",
             ])
@@ -64,10 +67,22 @@ final class MenuModelTests: XCTestCase {
 
     func testSaveToLabelShowsDirectoryAndIsDisabled() {
         let dir = items(allOff, dir: "/Users/me/Shots")[1]
-        XCTAssertEqual(dir.title, "Save to: /Users/me/Shots")
+        XCTAssertEqual(dir.title, "Save to: /Users/me/Shots (custom)")
         XCTAssertFalse(dir.isEnabled)
         XCTAssertNil(dir.action)
         XCTAssertEqual(dir.tag, 0)
+    }
+
+    func testDefaultFolderItemAppearsOnlyWhileOverridden() {
+        let overridden = items(allOff, overridden: true)
+        XCTAssertEqual(
+            item(.useDefaultScreenshotDir, in: overridden)?.title, "Use macOS default folder")
+        let index = overridden.firstIndex { $0.action == .chooseScreenshotDir }!
+        XCTAssertEqual(overridden[index + 1].action, .useDefaultScreenshotDir)
+
+        let notOverridden = items(allOff, dir: "/Users/me/Desktop", overridden: false)
+        XCTAssertNil(item(.useDefaultScreenshotDir, in: notOverridden))
+        XCTAssertEqual(notOverridden[1].title, "Save to: /Users/me/Desktop (macOS default)")
     }
 
     func testAllPrefsOffUncheckToggles() {
@@ -102,7 +117,7 @@ final class MenuModelTests: XCTestCase {
 
     func testNonToggleItemsHaveNoCheckmarkAndOnlyQuitHasKeyEquivalent() {
         let menu = items(allOff)
-        for action in [MenuAction.injectLastScreenshot, .injectClipboardNow, .chooseScreenshotDir, .quit] {
+        for action in [MenuAction.injectLastScreenshot, .injectClipboardNow, .chooseScreenshotDir, .useDefaultScreenshotDir, .quit] {
             XCTAssertNil(item(action, in: menu)?.isOn, "\(action)")
             XCTAssertEqual(item(action, in: menu)?.isEnabled, true, "\(action)")
         }
@@ -181,7 +196,7 @@ final class MenuModelTests: XCTestCase {
         let prefs = MenuPrefs(
             autoFocus: true, autoReturn: false, notifications: true, autoWatch: false,
             clipboardWatch: true)
-        for action in [MenuAction.injectLastScreenshot, .injectClipboardNow, .chooseScreenshotDir, .quit] {
+        for action in [MenuAction.injectLastScreenshot, .injectClipboardNow, .chooseScreenshotDir, .useDefaultScreenshotDir, .quit] {
             XCTAssertEqual(
                 MenuModel.toggle(action, prefs: prefs),
                 MenuModel.ToggleResult(prefs: prefs, command: nil), "\(action)")
@@ -207,6 +222,7 @@ final class MenuModelTests: XCTestCase {
                 "injectLastScreenshot",
                 "injectClipboardNow",
                 "chooseScreenshotDir",
+                "useDefaultScreenshotDir",
                 "terminate:",
             ])
     }
@@ -323,7 +339,7 @@ final class MenuModelTests: XCTestCase {
     }
 
     func testApplyToggleIgnoresNonToggleActions() {
-        for action in [MenuAction.injectLastScreenshot, .injectClipboardNow, .chooseScreenshotDir, .quit] {
+        for action in [MenuAction.injectLastScreenshot, .injectClipboardNow, .chooseScreenshotDir, .useDefaultScreenshotDir, .quit] {
             XCTAssertEqual(apply(action, allOff), allOff, "\(action)")
             XCTAssertTrue(persisted.isEmpty, "\(action)")
             XCTAssertEqual(watcherCalls, [], "\(action)")

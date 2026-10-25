@@ -130,6 +130,9 @@ Click the camera icon in your menu bar. Everything is configurable:
 | **Inject last screenshot** | — | Menu action: injects the most recent screenshot file path |
 | **Inject clipboard image** | — | Menu action: sends Ctrl-V to paste current clipboard image |
 | **Change screenshot folder** | Your macOS default | Pick any folder — opens a standard folder picker |
+| **Use macOS default folder** | — | Menu action, shown only while a custom folder is set: reverts to the macOS screenshot location |
+
+Overriding the folder only changes where hotshot saves and watches; ⌘⇧3/4 files still go to the macOS location unless you change that too (System Settings › Screenshot app › Options › Save to, or `defaults write com.apple.screencapture location`).
 
 ## Works with these terminals
 

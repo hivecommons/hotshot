@@ -12,6 +12,7 @@ public enum MenuAction: Equatable, CaseIterable {
     case injectLastScreenshot
     case injectClipboardNow
     case chooseScreenshotDir
+    case useDefaultScreenshotDir
     case quit
 
     /// Objective-C selector name of the handler: an `@objc` method on the
@@ -28,6 +29,7 @@ public enum MenuAction: Equatable, CaseIterable {
         case .injectLastScreenshot: return "injectLastScreenshot"
         case .injectClipboardNow: return "injectClipboardNow"
         case .chooseScreenshotDir: return "chooseScreenshotDir"
+        case .useDefaultScreenshotDir: return "useDefaultScreenshotDir"
         case .quit: return "terminate:"
         }
     }
@@ -172,10 +174,14 @@ public enum MenuModel {
 
     /// The full status-bar menu, top to bottom: 2 labels, 5 pref toggles,
     /// 2 inject actions, the folder picker and Quit, with separators.
-    public static func items(prefs: MenuPrefs, screenshotDir: String) -> [Item] {
+    public static func items(
+        prefs: MenuPrefs, screenshotDir: String, screenshotDirIsOverridden: Bool = false
+    ) -> [Item] {
         [
             Item(title: initialTargetTitle, action: nil, tag: targetItemTag),
-            Item(title: "Save to: \(screenshotDir)", action: nil, isEnabled: false),
+            Item(
+                title: "Save to: \(screenshotDir) (\(screenshotDirIsOverridden ? "custom" : "macOS default"))",
+                action: nil, isEnabled: false),
             .separator,
             Item(
                 title: "Auto-focus terminal after paste", action: .toggleAutoFocus,
@@ -195,6 +201,10 @@ public enum MenuModel {
             Item(title: "Inject clipboard image (Ctrl-V)", action: .injectClipboardNow),
             .separator,
             Item(title: "Change screenshot folder\u{2026}", action: .chooseScreenshotDir),
+        ]
+        + (screenshotDirIsOverridden
+            ? [Item(title: "Use macOS default folder", action: .useDefaultScreenshotDir)] : [])
+        + [
             .separator,
             Item(title: "Quit Hotshot", action: .quit, keyEquivalent: "q"),
         ]
@@ -240,7 +250,8 @@ public enum MenuModel {
             next.clipboardWatch.toggle()
             return ToggleResult(
                 prefs: next, command: next.clipboardWatch ? .startClipboard : .stopClipboard)
-        case .injectLastScreenshot, .injectClipboardNow, .chooseScreenshotDir, .quit:
+        case .injectLastScreenshot, .injectClipboardNow, .chooseScreenshotDir, .useDefaultScreenshotDir,
+            .quit:
             return ToggleResult(prefs: prefs, command: nil)
         }
     }

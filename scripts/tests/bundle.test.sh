@@ -178,6 +178,45 @@ assert_eq "rebuild: exit 0" "0" "$rc"
 if [ -e "$STALE" ]; then check "rebuild: stale bundle contents removed" 1; else check "rebuild: stale bundle contents removed" 0; fi
 
 # ==============================================================================
+# version stamping: untagged, tagged, dirty and non-git checkouts
+# ==============================================================================
+plist_value() { # $1 = plist path, $2 = key
+    grep -A1 "<key>$2</key>" "$1" | sed -n 's|.*<string>\(.*\)</string>.*|\1|p'
+}
+
+assert_eq "version: non-git checkout falls back to 0.0.0 (CFBundleVersion)" "0.0.0" "$(plist_value "$APP/Contents/Info.plist" CFBundleVersion)"
+assert_eq "version: non-git checkout falls back to 0.0.0 (CFBundleShortVersionString)" "0.0.0" "$(plist_value "$APP/Contents/Info.plist" CFBundleShortVersionString)"
+
+git_in() { # $1 = dir; remaining args run as git there with a fixed identity
+    local dir="$1"
+    shift
+    git -C "$dir" -c user.name=test -c user.email=test@example.com -c commit.gpgsign=false -c tag.gpgsign=false "$@"
+}
+
+PROJ4="$TMP/proj-git"
+make_project "$PROJ4"
+git_in "$PROJ4" init -q
+git_in "$PROJ4" add -A
+git_in "$PROJ4" commit -q -m initial
+run_bundle "$PROJ4" >/dev/null 2>&1
+PL="$PROJ4/Hotshot.app/Contents/Info.plist"
+sha="$(git_in "$PROJ4" rev-parse --short HEAD)"
+assert_eq "version: untagged checkout uses commit id (CFBundleVersion)" "$sha" "$(plist_value "$PL" CFBundleVersion)"
+assert_eq "version: untagged checkout short version is 0.0.0" "0.0.0" "$(plist_value "$PL" CFBundleShortVersionString)"
+
+git_in "$PROJ4" tag v0.1.0
+run_bundle "$PROJ4" >/dev/null 2>&1
+assert_eq "version: tagged checkout strips the v prefix (CFBundleVersion)" "0.1.0" "$(plist_value "$PL" CFBundleVersion)"
+assert_eq "version: tagged checkout (CFBundleShortVersionString)" "0.1.0" "$(plist_value "$PL" CFBundleShortVersionString)"
+
+printf 'more' >"$PROJ4/extra.txt"
+git_in "$PROJ4" add extra.txt
+git_in "$PROJ4" commit -q -m second
+run_bundle "$PROJ4" >/dev/null 2>&1
+assert_eq "version: commits after the tag keep the semver short version" "0.1.0" "$(plist_value "$PL" CFBundleShortVersionString)"
+assert_contains "version: commits after the tag extend CFBundleVersion" "0.1.0-1-g" "$(plist_value "$PL" CFBundleVersion)"
+
+# ==============================================================================
 # failed build aborts before bundling (set -e)
 # ==============================================================================
 PROJ2="$TMP/proj-fail"

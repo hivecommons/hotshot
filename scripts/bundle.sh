@@ -9,6 +9,15 @@ CONTENTS="$APP_BUNDLE/Contents"
 MACOS="$CONTENTS/MacOS"
 RESOURCES="$CONTENTS/Resources"
 
+# Releases are v-prefixed semver tags; fall back to 0.0.0 outside a git checkout.
+VERSION="$(git -C "$PROJECT_DIR" describe --tags --always --dirty 2>/dev/null | sed 's/^v//')"
+[ -n "$VERSION" ] || VERSION="0.0.0"
+SHORT_VERSION="${VERSION%%-*}"
+case "$SHORT_VERSION" in
+    [0-9]*.[0-9]*.[0-9]*) ;;
+    *) SHORT_VERSION="0.0.0" ;;
+esac
+
 echo "Building release binary..."
 cd "$PROJECT_DIR"
 swift build -c release
@@ -20,7 +29,7 @@ mkdir -p "$MACOS" "$RESOURCES"
 cp .build/release/hotshot "$MACOS/hotshot"
 cp "$PROJECT_DIR/resources/AppIcon.icns" "$RESOURCES/AppIcon.icns"
 
-cat > "$CONTENTS/Info.plist" << 'PLIST'
+cat > "$CONTENTS/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -34,9 +43,9 @@ cat > "$CONTENTS/Info.plist" << 'PLIST'
     <key>CFBundleIdentifier</key>
     <string>io.hivecommons.hotshot</string>
     <key>CFBundleVersion</key>
-    <string>1.0.0</string>
+    <string>$VERSION</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>$SHORT_VERSION</string>
     <key>CFBundleExecutable</key>
     <string>hotshot</string>
     <key>CFBundleIconFile</key>

@@ -27,7 +27,8 @@ hotshot is built from source on each machine (`swift build -c release`, or `scri
 ## Verify
 
 1. Relaunch with `HOTSHOT_VERBOSE_LOGGING=1` and confirm `app.launched`, then `watcher.started`.
-2. Take a screenshot with the target terminal focused. The `watcher.new_screenshot` (or `pasteboard.loaded`) event appears with no error after it, and the path or image lands in the terminal.
+2. Confirm the installed app reports the expected release: `CFBundleShortVersionString` in `Hotshot.app/Contents/Info.plist` is derived by `scripts/bundle.sh` from the git tag (`v0.1.0` gives `0.1.0`), and `CFBundleVersion` is the full `git describe` string.
+3. Take a screenshot with the target terminal focused. The `watcher.new_screenshot` (or `pasteboard.loaded`) event appears with no error after it, and the path or image lands in the terminal.
 
 ## Fix forward
 

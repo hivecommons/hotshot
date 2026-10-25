@@ -1292,6 +1292,23 @@ assert_eq "e2e interpreter-wrapped claude: notification names claude" \
     "hotshot Screenshot captured (CLI: claude)" "$(cat "$NOTIFYLOG")"
 assert_eq "e2e interpreter-wrapped claude: typed bracketed path" "[$shot] " "$(cat "$TYPELOG")"
 
+# Multi-tab terminal server: claude and copilot siblings under one focused pid
+# -> the escaped bare path, end to end. A fresh tree rather than $mixed_root so
+# the case does not depend on how long the earlier sleep has been running.
+setsid bash -c "bash -c 'exec -a copilot sleep 300' & bash -c 'exec -a claude sleep 300' & wait" >/dev/null 2>&1 &
+mixed_e2e_root=$!
+CHILD_PIDS+=("$mixed_e2e_root")
+sleep 0.3
+mkdir -p "$TMP/spaced dir"
+rm -f "$NOTIFYLOG"
+shot="$(run_e2e_stubs "$NOTIFYSTUBS" "$mixed_e2e_root" --full --dir "$TMP/spaced dir")"
+rc=$?
+assert_eq "e2e claude + copilot siblings: exit 0" "0" "$rc"
+assert_eq "e2e claude + copilot siblings: notification names plain" \
+    "hotshot Screenshot captured (CLI: plain)" "$(cat "$NOTIFYLOG")"
+assert_eq "e2e claude + copilot siblings: typed escaped bare path, not bracketed" \
+    "$(shell_escape "$shot") " "$(cat "$TYPELOG")"
+
 # die() -> the failure reason is also sent as a notification.
 printf '#!/usr/bin/env bash\nexit 1\n' >"$NOTIFYSTUBS/maim"
 rm -f "$NOTIFYLOG"

@@ -44,13 +44,25 @@ Describe 'Get-TargetCli' {
         Get-TargetCli 100 | Should -Be 'plain'
     }
 
-    It 'prefers claude when both claude and plain CLIs are present' {
+    It 'prefers the escaped path when both claude and plain CLIs are present' {
         $script:ChildName = 'aider.exe'
         $script:ChildCommandLine = 'aider'
         $script:GrandchildName = 'claude.exe'
         $script:GrandchildCommandLine = 'claude'
 
-        Get-TargetCli 100 | Should -Be 'claude'
+        Get-TargetCli 100 | Should -Be 'plain'
+    }
+
+    It 'returns plain for sibling claude and copilot tabs under one terminal' {
+        Mock Get-CimInstance -ModuleName HotshotCapture {
+            @(
+                [pscustomobject]@{ ProcessId = 100; ParentProcessId = 0; Name = 'WindowsTerminal.exe'; CommandLine = 'wt.exe' }
+                [pscustomobject]@{ ProcessId = 200; ParentProcessId = 100; Name = 'claude.exe'; CommandLine = 'claude' }
+                [pscustomobject]@{ ProcessId = 300; ParentProcessId = 100; Name = 'copilot.exe'; CommandLine = 'copilot' }
+            )
+        }
+
+        Get-TargetCli 100 | Should -Be 'plain'
     }
 
     It 'does not treat a CLAUDE.md document argument as the claude CLI' {

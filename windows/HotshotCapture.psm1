@@ -20,6 +20,7 @@ function Get-TargetCli {
     $byParent = $all | Group-Object ParentProcessId -AsHashTable -AsString
 
     $sawPlain = $false
+    $sawClaude = $false
     $queue = [System.Collections.Generic.Queue[uint32]]::new()
     $queue.Enqueue($RootPid)
     $seen = @{}
@@ -31,21 +32,26 @@ function Get-TargetCli {
         foreach ($pr in $proc) {
             $name = if ($pr.Name) { $pr.Name.ToLower() } else { '' }
             $cmd = if ($pr.CommandLine) { $pr.CommandLine.ToLower() } else { '' }
-            if ($name -eq 'claude.exe') { return 'claude' }
+            if ($name -eq 'claude.exe') { $sawClaude = $true }
             if ($name -in @('copilot.exe', 'aider.exe', 'opencode.exe')) { $sawPlain = $true }
             # Tokenize quote-aware so a space inside a quoted path ("claude projects")
             # cannot produce a bare 'claude' token.
             foreach ($m in [regex]::Matches($cmd, '"([^"]*)"|(\S+)')) {
                 $token = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { $m.Groups[2].Value }
                 $leaf = ($token -split '[\\/]')[-1] -replace '\.(exe|cmd|bat|ps1|mjs|js|cjs)$', ''
-                if ($leaf -eq 'claude' -or $leaf -eq 'claude-code') { return 'claude' }
+                if ($leaf -eq 'claude' -or $leaf -eq 'claude-code') { $sawClaude = $true }
                 if ($leaf -in @('copilot', 'aider', 'opencode')) { $sawPlain = $true }
             }
         }
         $kids = $byParent["$p"]
         if ($kids) { foreach ($k in $kids) { $queue.Enqueue([uint32]$k.ProcessId) } }
     }
-    if ($sawPlain) { return 'plain' } else { return 'unknown' }
+    # Both in one tree means a multi-tab terminal server with an unknown focused
+    # tab; the escaped path is accepted by every CLI, so prefer it.
+    if ($sawClaude -and $sawPlain) { return 'plain' }
+    if ($sawClaude) { return 'claude' }
+    if ($sawPlain) { return 'plain' }
+    return 'unknown'
 }
 
 # Parity with macOS SHELL_COMMAND_METACHARACTERS and linux has_shell_metachars.

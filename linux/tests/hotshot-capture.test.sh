@@ -219,6 +219,13 @@ assert_eq "classify_cli: aider grandchild -> plain" "plain" "$(classify_cli "$ro
 root="$(spawn_tree opencode)"
 assert_eq "classify_cli: opencode grandchild -> plain" "plain" "$(classify_cli "$root")"
 
+# Two tabs under one terminal server: claude and copilot siblings -> plain.
+setsid bash -c "bash -c 'exec -a copilot sleep 300' & bash -c 'exec -a claude sleep 300' & wait" >/dev/null 2>&1 &
+mixed_root=$!
+CHILD_PIDS+=("$mixed_root")
+sleep 0.3
+assert_eq "classify_cli: claude + copilot siblings -> plain" "plain" "$(classify_cli "$mixed_root")"
+
 setsid sleep 300 >/dev/null 2>&1 &
 plain_root=$!
 CHILD_PIDS+=("$plain_root")

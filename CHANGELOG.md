@@ -10,6 +10,7 @@ All notable changes to hotshot are documented in this file. The format is based 
 
 ### Fixed
 
+- Linux and Windows: when a terminal process tree runs both claude and a plain-path CLI (multi-tab terminal servers), classification now returns the escaped bare path instead of the bracketed claude format (#294).
 - Windows: `Get-TargetCli` no longer classifies `CLAUDE.md` or a `claude\` path segment in a child command line as the claude CLI (#290).
 - Linux and Windows: target classification now matches CLI names per command-line argument, so a `claude <x>` path component no longer selects the claude format (#292).
 - Watch mode now follows an external change of the macOS screenshot location instead of staying on the old folder, and reading that location no longer forks `defaults` on every lookup.

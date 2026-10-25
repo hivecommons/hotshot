@@ -11,6 +11,8 @@
 #        claude                     -> "[path] "   (bracketed)
 #        copilot / aider / opencode -> escaped bare path + " "
 #        unknown                    -> "[path] "   (historical default)
+#      A tree holding both claude and a plain-path CLI (multi-tab terminal
+#      server) -> escaped bare path, which every supported CLI accepts.
 #
 # Works on X11 (maim/scrot + xclip + xdotool) and Wayland
 # (grim/slurp + wl-copy + wtype/ydotool; window focus via sway/hyprland IPC).
@@ -220,16 +222,15 @@ descendants() { # $1 = root pid
     done
 }
 
+# A tree with both claude and a plain-path CLI is a multi-tab terminal server
+# whose focused tab is unknown; answer "plain" since every CLI accepts it.
 classify_cli() { # $1 = root pid; echoes "claude" | "plain" | "unknown"
-    local saw_plain=0 pid comm tok leaf base
+    local saw_plain=0 saw_claude=0 pid comm tok leaf base
     while read -r pid; do
         comm="$(cat "/proc/$pid/comm" 2>/dev/null || true)"
         base="${comm##*/}"
         case "$base" in
-            claude)
-                echo claude
-                return
-                ;;
+            claude) saw_claude=1 ;;
             copilot | aider | opencode) saw_plain=1 ;;
         esac
         # node/python-wrapped CLIs: compare each argv token's leaf name, so a
@@ -237,15 +238,20 @@ classify_cli() { # $1 = root pid; echoes "claude" | "plain" | "unknown"
         while IFS= read -r -d '' tok || [ -n "$tok" ]; do
             leaf="${tok##*/}"
             case "$leaf" in
-                claude)
-                    echo claude
-                    return
-                    ;;
+                claude) saw_claude=1 ;;
                 copilot | aider | opencode) saw_plain=1 ;;
             esac
         done < <(cat "/proc/$pid/cmdline" 2>/dev/null || true)
     done < <(descendants "$1")
-    [ "$saw_plain" = 1 ] && echo plain || echo unknown
+    if [ "$saw_claude" = 1 ] && [ "$saw_plain" = 1 ]; then
+        echo plain
+    elif [ "$saw_claude" = 1 ]; then
+        echo claude
+    elif [ "$saw_plain" = 1 ]; then
+        echo plain
+    else
+        echo unknown
+    fi
 }
 
 CLI="unknown"

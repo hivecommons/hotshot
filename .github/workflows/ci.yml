@@ -46,10 +46,10 @@ jobs:
           import json, sys
 
           # module -> line-coverage floor. Add a line here when a new library
-          # target joins the test bundle. Floors sit a few points under the
-          # figure CI last measured on main (HotshotCore 98.7%, HotshotApp
-          # 99.2% at #270); raise them again when a PR lifts coverage.
-          floors = {"HotshotCore": 96, "HotshotApp": 97}
+          # target joins the test bundle. Floors sit a point or two under the
+          # figure CI last measured on main (HotshotCore 100%, HotshotApp
+          # 98.9% at #302); raise them again when a PR lifts coverage.
+          floors = {"HotshotCore": 99, "HotshotApp": 98}
 
           data = json.load(open("coverage.json"))["data"][0]
           totals = {}

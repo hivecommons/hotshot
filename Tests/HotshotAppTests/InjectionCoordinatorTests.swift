@@ -184,6 +184,31 @@ final class InjectionCoordinatorTests: XCTestCase {
         XCTAssertEqual(events.first?.path, "/shots/latest.png")
     }
 
+    func testDefaultDiagnosticSinkDiscardsEventsWithoutFailing() {
+        // `diagnostic` defaults to a no-op; a caller that omits it must still
+        // be able to run a path that emits one.
+        let coordinator = InjectionCoordinator(
+            target: { [terminal] in terminal },
+            enrichClipboard: { nil },
+            hasClipboardImage: { false },
+            mostRecentScreenshot: { _ in "/shots/latest.png" },
+            sendCtrlV: { _, _ in .failed },
+            injectPath: { [weak self] path, bid in
+                self?.calls.append("injectPath:\(path):\(bid)")
+                return .injected
+            },
+            focusTerminal: { _ in },
+            autoFocus: { false },
+            notify: { [weak self] body in self?.notifications.append(body) })
+
+        let outcome = coordinator.injectLastScreenshot(dir: "/shots")
+
+        XCTAssertEqual(outcome, .injected(successBody: "Injected \u{2192} /shots/latest.png"))
+        XCTAssertEqual(calls, ["injectPath:/shots/latest.png:com.googlecode.iterm2"])
+        XCTAssertEqual(notifications, ["Injected \u{2192} /shots/latest.png"])
+        XCTAssertTrue(events.isEmpty, "the default sink must not reach the test recorder")
+    }
+
     // MARK: - newScreenshot (handleNewScreenshot)
 
     func testNewScreenshotWithoutTargetDoesNotInject() {

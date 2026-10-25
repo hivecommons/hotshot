@@ -354,6 +354,12 @@ final class TerminalInjectorTests: XCTestCase {
         XCTAssertEqual(events.first { $0.event == "applescript.error" }?.detail, "System Events denied")
     }
 
+    func testIsInjectedIsTrueOnlyForTheInjectedResult() {
+        XCTAssertTrue(InjectionResult.injected.isInjected)
+        XCTAssertFalse(InjectionResult.failed.isInjected)
+        XCTAssertFalse(InjectionResult.refused.isInjected)
+    }
+
     // MARK: - focus guard (parity with the Linux/Windows `injection.focus_lost`)
 
     func testInjectPathRefusesToTypeWhenTheTerminalIsNotFrontmost() {

@@ -242,11 +242,12 @@ classify_cli() { # $1 = root pid; echoes "claude" | "plain" | "gemini" | "unknow
                 claude) saw_claude=1 ;;
                 copilot | aider | opencode) saw_plain=1 ;;
                 gemini) saw_gemini=1 ;;
-            gemini) saw_gemini=1 ;;
             esac
         done < <(cat "/proc/$pid/cmdline" 2>/dev/null || true)
     done < <(descendants "$1")
-    if [ "$saw_claude" = 1 ] && [ "$saw_plain" = 1 ]; then
+    # Two different known CLIs in one tree: the focused tab is unknown, and
+    # the plain path is the one form every CLI accepts.
+    if [ $((saw_claude + saw_plain + saw_gemini)) -gt 1 ]; then
         echo plain
     elif [ "$saw_claude" = 1 ]; then
         echo claude

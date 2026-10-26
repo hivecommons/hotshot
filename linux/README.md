@@ -90,8 +90,8 @@ hotshot-capture [--region|--full] [--no-type] [--dir DIR]
   `wl-copy` serve one MIME target per invocation, so by default the clipboard
   carries the **image only** (paste with Ctrl-V in Claude Code or GUI apps);
   the typed injection delivers the path. If [CopyQ](https://hluk.github.io/CopyQ/)
-  is running, hotshot puts **both** `image/png` and the text path on the
-  clipboard, matching macOS exactly.
+  is running, hotshot puts `image/png`, the `text/plain` path, and a percent-encoded
+  `text/uri-list` file URL on a single clipboard entry, matching macOS.
 - **Focus tracking**: instead of a menu-bar app that remembers your last
   terminal, the Linux port captures the focused window at hotkey press time —
   press the hotkey while your terminal is focused, then select the region.

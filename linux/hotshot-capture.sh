@@ -5,7 +5,7 @@
 # Behavior contract (parity with the macOS app):
 #   1. Capture a region (default) or full-screen screenshot to a PNG file.
 #   2. Load the clipboard with the PNG image (and, when a multi-format
-#      clipboard helper is available, the plain-text path too).
+#      clipboard helper is available, the plain-text path and file URI too).
 #   3. Detect which AI CLI is running in the focused terminal by walking its
 #      child processes, then type the matching format:
 #        claude                     -> "[path] "   (bracketed)
@@ -182,13 +182,28 @@ else
 fi
 [ -s "$SHOT_PATH" ] || die "screenshot file was not created"
 
+# Encode path bytes rather than locale-dependent characters, preserving only
+# URI unreserved characters and path separators. No extra runtime dependency.
+file_uri() {
+    local LC_ALL=C path="$1" ch i
+    printf 'file://'
+    for ((i = 0; i < ${#path}; i++)); do
+        ch="${path:$i:1}"
+        case "$ch" in
+            [a-zA-Z0-9/._~-]) printf '%s' "$ch" ;;
+            *) printf '%%%02X' "'$ch" ;;
+        esac
+    done
+}
+
 # --- 2. clipboard ------------------------------------------------------------
 # X11/Wayland clipboards have a single owner, and xclip/wl-copy serve one
 # target each. If copyq is running we can mirror macOS exactly (one clipboard
-# entry carrying image/png + text path); otherwise the image wins and the
-# typed injection delivers the path.
+# entry carrying image/png + text path + file URI); otherwise the image wins
+# and the typed injection delivers the path.
 if have copyq && copyq size >/dev/null 2>&1; then
-    if ! copyq copy image/png - text/plain "$SHOT_PATH" <"$SHOT_PATH" >/dev/null 2>&1; then
+    URI="$(file_uri "$SHOT_PATH")"
+    if ! copyq copy image/png - text/plain "$SHOT_PATH" text/uri-list "${URI}"$'\r\n' <"$SHOT_PATH" >/dev/null 2>&1; then
         copyq copy image/png - <"$SHOT_PATH" >/dev/null 2>&1 ||
             log_event WARN clipboard.copyq_failed
     fi

@@ -52,6 +52,13 @@ trap cleanup EXIT
 extract_fn() { # $1 = function name
     sed -n "/^$1() {/,/^}$/p" "$SCRIPT"
 }
+eval "$(extract_fn file_uri)"
+assert_eq "file_uri: unreserved characters and separators"  \
+    'file:///tmp/Az09-._~/shot.png' "$(file_uri '/tmp/Az09-._~/shot.png')"
+assert_eq "file_uri: reserved characters and UTF-8 bytes"  \
+    'file:///tmp/a%20%23%25%3F%3A%27%C3%A9.png' "$(file_uri "/tmp/a #%?:'é.png")"
+assert_eq "file_uri: controls cannot add URI list entries"  \
+    'file:///tmp/a%0D%0A%09b.png' "$(file_uri $'/tmp/a\r\n\tb.png')"
 eval "$(extract_fn shell_escape)"
 eval "$(extract_fn has_control_chars)"
 eval "$(extract_fn has_shell_metachars)"
@@ -791,21 +798,35 @@ run_e2e_stubs() { # $1 = stub dir, $2 = focus pid; remaining args passed on
         bash "$SCRIPT" "$@"
 }
 
-# copyq running -> one multi-format entry (image/png + text path), xclip unused.
+# copyq running -> one entry with image, path and URI, xclip unused.
 cat >"$CQSTUBS/copyq" <<EOF
 #!/usr/bin/env bash
 [ "\$1" = "size" ] && { echo 1; exit 0; }
-cat >/dev/null
-echo "\$@" >>"$COPYQLOG"
+cat >"$TMP/copyq-image"
+printf '%s\\0' "\$@" >"$COPYQLOG"
 EOF
 chmod +x "$CQSTUBS/copyq"
-shot="$(run_e2e_stubs "$CQSTUBS" "$plain_root" --full)"
-rc=$?
-assert_eq "e2e copyq: exit 0" "0" "$rc"
-grep -q -- "copy image/png - text/plain $shot" "$COPYQLOG"
-check "e2e copyq: multi-format entry carries image + text path" $?
-ok=1; [ ! -e "$CLIPLOG" ] && ok=0
-check "e2e copyq: xclip not called when copyq owns the clipboard" "$ok"
+for cq_dir in "$TMP/shots" "$TMP/space #%?é"; do
+    shot="$(run_e2e_stubs "$CQSTUBS" "$plain_root" --full --no-type --dir "$cq_dir")"
+    rc=$?
+    assert_eq "e2e copyq: exit 0" "0" "$rc"
+    cq_args=()
+    while IFS= read -r -d '' arg; do cq_args+=("$arg"); done <"$COPYQLOG"
+    assert_eq "e2e copyq: exactly three MIME pairs" "7" "${#cq_args[@]}"
+    assert_eq "e2e copyq: image MIME and stdin marker" "copy image/png -" "${cq_args[*]:0:3}"
+    assert_eq "e2e copyq: text MIME" "text/plain" "${cq_args[3]}"
+    assert_eq "e2e copyq: text path unchanged" "$shot" "${cq_args[4]}"
+    assert_eq "e2e copyq: URI MIME" "text/uri-list" "${cq_args[5]}"
+    case "$cq_dir" in
+        "$TMP/shots") expected_uri="file://$TMP/shots/${shot##*/}" ;;
+        *) expected_uri="file://$TMP/space%20%23%25%3F%C3%A9/${shot##*/}" ;;
+    esac
+    assert_eq "e2e copyq: encoded URI with exact CRLF" "${expected_uri}"$'\r\n' "${cq_args[6]}"
+    cmp -s "$shot" "$TMP/copyq-image"
+    check "e2e copyq: PNG supplied on stdin" $?
+    ok=1; [ ! -e "$CLIPLOG" ] && ok=0
+    check "e2e copyq: xclip not called when copyq owns the clipboard" "$ok"
+done
 
 # copyq multi-format copy fails -> image-only fallback, still exit 0.
 cat >"$CQSTUBS/copyq" <<EOF

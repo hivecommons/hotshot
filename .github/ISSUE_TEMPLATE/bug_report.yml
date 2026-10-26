@@ -65,6 +65,7 @@ body:
         - GitHub Copilot CLI (copilot)
         - aider
         - OpenCode (opencode)
+        - Gemini CLI (gemini)
         - other / none
     validations:
       required: true

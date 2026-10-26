@@ -18,9 +18,10 @@ your desktop environment, press the hotkey, select a region, and hotshot:
 |---|---|
 | Claude Code (`claude`) | `[/path/to/shot.png] ` (bracketed) |
 | GitHub Copilot CLI / aider / OpenCode | bare backslash-escaped path + space |
+| Gemini CLI | `@` + backslash-escaped path + space |
 | unknown | bracketed (historical default) |
 
-claude + copilot/aider/opencode in the same terminal process tree (e.g. gnome-terminal / kitty / Windows Terminal tabs) -> escaped bare path, because the focused tab cannot be told apart and every supported CLI accepts the escaped path.
+claude + copilot/aider/opencode in the same terminal process tree (e.g. gnome-terminal / kitty / Windows Terminal tabs) -> escaped bare path, because the focused tab cannot be told apart and every supported CLI accepts the escaped path. Gemini CLI gets its `@path` form only when it is the only known CLI in the tree.
 
 This is the same clipboard/typing contract as the macOS app.
 

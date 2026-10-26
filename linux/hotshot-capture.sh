@@ -224,14 +224,15 @@ descendants() { # $1 = root pid
 
 # A tree with both claude and a plain-path CLI is a multi-tab terminal server
 # whose focused tab is unknown; answer "plain" since every CLI accepts it.
-classify_cli() { # $1 = root pid; echoes "claude" | "plain" | "unknown"
-    local saw_plain=0 saw_claude=0 pid comm tok leaf base
+classify_cli() { # $1 = root pid; echoes "claude" | "plain" | "gemini" | "unknown"
+    local saw_plain=0 saw_claude=0 saw_gemini=0 pid comm tok leaf base
     while read -r pid; do
         comm="$(cat "/proc/$pid/comm" 2>/dev/null || true)"
         base="${comm##*/}"
         case "$base" in
             claude) saw_claude=1 ;;
             copilot | aider | opencode) saw_plain=1 ;;
+            gemini) saw_gemini=1 ;;
         esac
         # node/python-wrapped CLIs: compare each argv token's leaf name, so a
         # directory like "claude notes" inside one argument cannot match.
@@ -240,6 +241,8 @@ classify_cli() { # $1 = root pid; echoes "claude" | "plain" | "unknown"
             case "$leaf" in
                 claude) saw_claude=1 ;;
                 copilot | aider | opencode) saw_plain=1 ;;
+                gemini) saw_gemini=1 ;;
+            gemini) saw_gemini=1 ;;
             esac
         done < <(cat "/proc/$pid/cmdline" 2>/dev/null || true)
     done < <(descendants "$1")
@@ -249,6 +252,8 @@ classify_cli() { # $1 = root pid; echoes "claude" | "plain" | "unknown"
         echo claude
     elif [ "$saw_plain" = 1 ]; then
         echo plain
+    elif [ "$saw_gemini" = 1 ]; then
+        echo gemini
     else
         echo unknown
     fi
@@ -304,6 +309,7 @@ fi
 
 case "$CLI" in
     plain) TEXT="$(shell_escape "$SHOT_PATH") " ;;
+    gemini) TEXT="@$(shell_escape "$SHOT_PATH") " ;;
     *)
         TEXT="[$SHOT_PATH] "
         if [ "$DO_TYPE" = 1 ] && has_shell_metachars "$SHOT_PATH"; then

@@ -151,6 +151,8 @@ final class RepoMetadataDriftTests: XCTestCase {
         for name in ["copilot", "aider", "opencode"] {
             XCTAssertEqual(classifyCommands([name]), .plainPath, "\(name) is documented as a bare-path CLI")
         }
+        XCTAssertEqual(classifyCommands(["gemini"]), .atPath)
+        XCTAssertTrue(form.contains("Gemini CLI gets `@path `"), "target_request.yml must name the @path CLI")
         XCTAssertTrue(
             form.contains("GitHub Copilot CLI, aider and OpenCode get a bare escaped path"),
             "target_request.yml must name the bare-path CLIs")

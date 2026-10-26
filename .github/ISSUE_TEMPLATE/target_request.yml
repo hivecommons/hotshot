@@ -8,6 +8,7 @@ body:
       value: |
         hotshot picks the injection format from the AI CLI it finds in the focused terminal:
         Claude Code gets `[path] `, GitHub Copilot CLI, aider and OpenCode get a bare escaped path,
+        Gemini CLI gets `@path ` (an `@` followed by the escaped path),
         and anything else falls back to the bracketed form. On macOS it only injects into terminals it
         recognises. Use this form to ask for a terminal or CLI that is not handled yet.
   - type: dropdown

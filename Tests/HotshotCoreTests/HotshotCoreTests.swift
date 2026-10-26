@@ -31,7 +31,21 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertEqual(classifyCommands(["node /usr/local/bin/copilot"]), .plainPath)
         XCTAssertEqual(classifyCommands(["python3 /opt/bin/aider --model x"]), .plainPath)
         XCTAssertEqual(classifyCommands(["/usr/bin/env opencode"]), .plainPath)
+        XCTAssertEqual(classifyCommands(["node /opt/homebrew/bin/gemini"]), .atPath)
+        XCTAssertEqual(classifyCommands(["/Applications/GEMINI --yolo"]), .atPath)
         XCTAssertNil(classifyCommands(["zsh", "vim README.md"]))
+    }
+
+    func testClassifyCommandsGeminiTieRules() {
+        XCTAssertEqual(classifyCommands(["node /opt/homebrew/bin/gemini", "/opt/homebrew/bin/claude"]), .claude)
+        XCTAssertEqual(classifyCommands(["node /opt/homebrew/bin/gemini", "/usr/local/bin/copilot"]), .plainPath)
+        XCTAssertEqual(classifyCommands(["/usr/local/bin/aider", "gemini"]), .plainPath)
+        XCTAssertNil(classifyCommands(["vim gemini-notes.md", "/usr/local/bin/gemini2"]))
+    }
+
+    func testResolveTargetCLIReturnsAtPathForGemini() {
+        let cli = resolveTargetCLI(ttyPath: "/dev/ttys004") { _ in ["-zsh", "node /opt/homebrew/bin/gemini"] }
+        XCTAssertEqual(cli, .atPath)
     }
 
     func testClassifyCommandsPrefersClaudeWhenBothArePresent() {
@@ -449,10 +463,12 @@ final class HotshotCoreTests: XCTestCase {
     func testTypedScreenshotTextBuildsCliSpecificInjectionText() {
         XCTAssertEqual(typedScreenshotText(path: "/Users/me/My Shot.png", targetCLI: .claude), "[/Users/me/My Shot.png] ")
         XCTAssertEqual(typedScreenshotText(path: "/Users/me/My Shot.png", targetCLI: .plainPath), "/Users/me/My\\ Shot.png ")
+        XCTAssertEqual(typedScreenshotText(path: "/Users/me/My Shot.png", targetCLI: .atPath), "@/Users/me/My\\ Shot.png ")
     }
 
     func testTypedScreenshotTextRejectsControlCharacters() {
         XCTAssertNil(typedScreenshotText(path: "/Users/me/bad\nname.png", targetCLI: .plainPath))
+        XCTAssertNil(typedScreenshotText(path: "/Users/me/bad\nname.png", targetCLI: .atPath))
         // The claude/bracketed form embeds the path unescaped, so the
         // control-character refusal must hold for it too.
         XCTAssertNil(typedScreenshotText(path: "/Users/me/bad\rname.png", targetCLI: .claude))

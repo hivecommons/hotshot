@@ -58,6 +58,8 @@ public func typedScreenshotText(path: String, targetCLI: TargetCLI) -> String? {
     switch targetCLI {
     case .plainPath:
         return shellEscapedPath(path) + " "
+    case .atPath:
+        return "@" + shellEscapedPath(path) + " "
     case .claude:
         guard !containsShellCommandMetacharacters(path) else { return nil }
         return "[\(path)] "

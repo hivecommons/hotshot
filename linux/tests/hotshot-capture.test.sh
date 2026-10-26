@@ -195,7 +195,7 @@ check "unique_shot_path: earlier captures are left intact" $ok
 FAKEBIN="$TMP/fakebin"
 mkdir -p "$FAKEBIN"
 SLEEP_BIN="$(command -v sleep)"
-for name in claude copilot aider opencode; do
+for name in claude copilot aider opencode gemini; do
     cp "$SLEEP_BIN" "$FAKEBIN/$name"
 done
 
@@ -218,6 +218,28 @@ assert_eq "classify_cli: aider grandchild -> plain" "plain" "$(classify_cli "$ro
 
 root="$(spawn_tree opencode)"
 assert_eq "classify_cli: opencode grandchild -> plain" "plain" "$(classify_cli "$root")"
+
+root="$(spawn_tree gemini)"
+assert_eq "classify_cli: gemini grandchild -> gemini" "gemini" "$(classify_cli "$root")"
+
+# Path-qualified argv[0]: only the leaf name of the argv token matches.
+setsid bash -c "bash -c 'exec -a /opt/homebrew/bin/gemini sleep 300' & wait" >/dev/null 2>&1 &
+node_root=$!
+CHILD_PIDS+=("$node_root")
+sleep 0.3
+assert_eq "classify_cli: path-qualified gemini argv -> gemini" "gemini" "$(classify_cli "$node_root")"
+
+setsid bash -c "bash -c 'exec -a gemini sleep 300' & bash -c 'exec -a opencode sleep 300' & wait" >/dev/null 2>&1 &
+gm_root=$!
+CHILD_PIDS+=("$gm_root")
+sleep 0.3
+assert_eq "classify_cli: gemini + opencode siblings -> plain" "plain" "$(classify_cli "$gm_root")"
+
+setsid bash -c "bash -c 'exec -a gemini sleep 300' & bash -c 'exec -a claude sleep 300' & wait" >/dev/null 2>&1 &
+gc_root=$!
+CHILD_PIDS+=("$gc_root")
+sleep 0.3
+assert_eq "classify_cli: gemini + claude siblings -> plain" "plain" "$(classify_cli "$gc_root")"
 
 # Two tabs under one terminal server: claude and copilot siblings -> plain.
 setsid bash -c "bash -c 'exec -a copilot sleep 300' & bash -c 'exec -a claude sleep 300' & wait" >/dev/null 2>&1 &
@@ -324,6 +346,11 @@ check "e2e claude: screenshot file created and echoed" $ok
 assert_eq "e2e claude: typed bracketed path" "[$shot] " "$(cat "$TYPELOG")"
 grep -q -- "-t image/png -i $shot" "$CLIPLOG"
 check "e2e claude: clipboard loaded via xclip image/png" $?
+
+# Focused terminal runs gemini -> @path typed.
+root="$(spawn_tree gemini)"
+shot="$(run_e2e "$root" --full 2>"$TMP/e2e.err")"
+assert_eq "e2e gemini: typed @path" "@$shot " "$(cat "$TYPELOG")"
 
 # Relative / ~ directories are typed as absolute paths (issue #190).
 root="$(spawn_tree claude)"

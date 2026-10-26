@@ -2,7 +2,7 @@
 
 Take a screenshot, and it lands in your terminal. That's it.
 
-**hotshot** is a tiny app that watches for new screenshots and automatically injects them into whichever terminal session you were last using. Built for AI coding assistants like [Claude Code](https://claude.ai/code), GitHub Copilot CLI, aider, and OpenCode that accept image paths as input.
+**hotshot** is a tiny app that watches for new screenshots and automatically injects them into whichever terminal session you were last using. Built for AI coding assistants like [Claude Code](https://claude.ai/code), GitHub Copilot CLI, aider, OpenCode, and Gemini CLI that accept image paths as input.
 
 If you're like me, you use screenshots constantly to debug your work — a broken UI, a weird error message, a dashboard that doesn't look right. Normally you'd screenshot it, find the file, copy the path, switch to your terminal, paste it in. **hotshot** skips all of that — just take a screenshot the way you always do and it lands in your terminal.
 
@@ -25,6 +25,7 @@ All platforms honor the same contract:
 | CLI detection (focused terminal's processes) | `ps -t <tty>` | `/proc` descendants | Win32_Process tree |
 | Claude Code → typed `[path] ` | ✅ | ✅ | ✅ |
 | Copilot CLI / aider / OpenCode → bare escaped path | ✅ backslash-escaped | ✅ backslash-escaped | double-quoted if it contains spaces or shell metacharacters; refused if it contains `"`, `$` or `` ` `` |
+| Gemini CLI → `@` + escaped path | ✅ backslash-escaped | ✅ backslash-escaped | bracketed fallback (not yet supported) |
 | Unknown CLI → bracketed default | ✅ | ✅ | ✅ |
 
 The rest of this page documents the **macOS** app.
@@ -107,7 +108,7 @@ hotshot remembers which terminal you last clicked on. It supports two injection 
 **File mode** (on by default):
 1. macOS saves the screenshot to your configured folder (Desktop, Downloads, etc.)
 2. hotshot detects the new file within a couple of seconds
-3. Detects which CLI is running in the target terminal session (via its tty) and injects the matching format — `[bracketed]` for Claude Code, a bare shell-escaped path for GitHub Copilot CLI/aider/OpenCode — and also loads the clipboard with the image + file URL + plain-text path so you can ⌘V it anywhere
+3. Detects which CLI is running in the target terminal session (via its tty) and injects the matching format — `[bracketed]` for Claude Code, a bare shell-escaped path for GitHub Copilot CLI/aider/OpenCode, `@path` for Gemini CLI — and also loads the clipboard with the image + file URL + plain-text path so you can ⌘V it anywhere
 
 **Clipboard mode** (on by default):
 1. You take a screenshot to clipboard with ⌃⌘⇧3 or ⌃⌘⇧4
@@ -151,6 +152,7 @@ Any CLI tool that accepts image file paths as input:
 - [GitHub Copilot CLI](https://github.com/github/copilot-cli)
 - [aider](https://aider.chat)
 - [OpenCode](https://github.com/anomalyco/opencode)
+- [Gemini CLI](https://github.com/google-gemini/gemini-cli)
 - Any tool where you can paste a file path and it reads the image
 
 ## FAQ
@@ -168,7 +170,7 @@ By default, wherever your Mac saves screenshots (usually Desktop or Downloads). 
 That's on purpose. Watch mode only injects screenshots you took: files written by a browser, Mail, Messages or AirDrop carry macOS's quarantine attribute (`com.apple.quarantine`), which screen captures never do, so hotshot skips them rather than typing an image you didn't capture into your AI session. Use "Inject last screenshot" from the menu, or paste the path yourself, if you really want it.
 
 **What format is the path injected in?**
-hotshot inspects the processes on the target terminal session's tty (iTerm2 and Terminal.app) and picks the format that CLI understands: Claude Code gets `[/path/to/screenshot.png]`, while GitHub Copilot CLI, aider, and OpenCode get a bare backslash-escaped path (what Finder drag-and-drop inserts). If the CLI can't be determined, the historical bracketed format is used. The clipboard simultaneously carries the PNG image, a file URL, and the escaped plain-text path, so pasting (⌘V, or Ctrl-V in Claude Code) works everywhere.
+hotshot inspects the processes on the target terminal session's tty (iTerm2 and Terminal.app) and picks the format that CLI understands: Claude Code gets `[/path/to/screenshot.png]`, while GitHub Copilot CLI, aider, and OpenCode get a bare backslash-escaped path (what Finder drag-and-drop inserts), and Gemini CLI gets the same path prefixed with `@` (`@/path/to/screenshot.png`, its file-reference syntax). On Windows Gemini CLI still gets the bracketed fallback. If the CLI can't be determined, the historical bracketed format is used. The clipboard simultaneously carries the PNG image, a file URL, and the escaped plain-text path, so pasting (⌘V, or Ctrl-V in Claude Code) works everywhere.
 
 **Does it work over SSH / remote sessions?**
 Clipboard mode works with remote sessions (tmux, zellij, OpenShell) as long as the clipboard is shared between your Mac and the remote terminal. For sessions without shared clipboard, check out [clipssh](https://github.com/samuellawrentz/clipssh) or [clipaste](https://github.com/hqhq1025/clipaste).

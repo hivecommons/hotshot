@@ -12,6 +12,7 @@ public let TERMINAL_BUNDLE_IDS: Set<String> = [
 public enum TargetCLI: Equatable {
     case claude  // expects "[path] " bracketed form
     case plainPath  // GitHub Copilot CLI, aider, ... expect a bare escaped path
+    case atPath  // Gemini CLI reads "@path" references, with spaces backslash-escaped
 }
 
 /// Which AppleScript injection path a terminal bundle ID uses. iTerm2 gets
@@ -35,11 +36,14 @@ public func injectionTarget(forBundleID bid: String) -> InjectionTarget {
 }
 
 /// Classify the commands running on a tty. Claude wins ties since the
-/// bracketed form was hotshot's historical default. `ps -o command=` carries no
+/// bracketed form was hotshot's historical default. Gemini CLI's `@path` form
+/// is used only when it is the sole known CLI; next to a plain-path CLI the
+/// plain path wins. `ps -o command=` carries no
 /// argument boundaries, so a `claude <x>` directory inside an argument can
 /// still match here, unlike the Linux and Windows per-argument classifiers.
 public func classifyCommands(_ commands: [String]) -> TargetCLI? {
     var sawPlainPathCLI = false
+    var sawGemini = false
     for cmd in commands {
         for token in cmd.split(separator: " ") {
             let name = (String(token) as NSString).lastPathComponent.lowercased()
@@ -47,9 +51,11 @@ public func classifyCommands(_ commands: [String]) -> TargetCLI? {
             if name == "copilot" || name == "aider" || name == "opencode" {
                 sawPlainPathCLI = true
             }
+            if name == "gemini" { sawGemini = true }
         }
     }
-    return sawPlainPathCLI ? .plainPath : nil
+    if sawPlainPathCLI { return .plainPath }
+    return sawGemini ? .atPath : nil
 }
 
 /// Resolve which CLI is running in a terminal's focused session from an

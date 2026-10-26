@@ -10,8 +10,9 @@
 #      child processes, then type the matching format:
 #        claude                     -> "[path] "   (bracketed)
 #        copilot / aider / opencode -> escaped bare path + " "
+#        gemini                     -> "@" + escaped bare path + " "
 #        unknown                    -> "[path] "   (historical default)
-#      A tree holding both claude and a plain-path CLI (multi-tab terminal
+#      A tree holding two or more different known CLIs (multi-tab terminal
 #      server) -> escaped bare path, which every supported CLI accepts.
 #
 # Works on X11 (maim/scrot + xclip + xdotool) and Wayland

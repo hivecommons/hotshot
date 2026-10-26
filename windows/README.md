@@ -22,9 +22,10 @@ built-in Snipping Tool overlay, and hotshot:
 |---|---|
 | Claude Code (`claude`) | `[C:\path\to\shot.png] ` (bracketed) |
 | GitHub Copilot CLI / aider / OpenCode | bare path (double-quoted if it contains spaces or shell metacharacters; refused if it contains `"`, `$` or `` ` ``) + space |
+| Gemini CLI (`gemini`) | `@"C:\path\to\shot.png" ` (`@` plus the always double-quoted raw path; refused if it contains `"`) |
 | unknown | bracketed (historical default) |
 
-claude + copilot/aider/opencode in the same terminal process tree (e.g. gnome-terminal / kitty / Windows Terminal tabs) -> escaped bare path, because the focused tab cannot be told apart and every supported CLI accepts the escaped path.
+Two or more of claude / copilot / aider / opencode / gemini in the same terminal process tree (e.g. gnome-terminal / kitty / Windows Terminal tabs) -> bare path, because the focused tab cannot be told apart and every supported CLI accepts the escaped path.
 
 This is the same clipboard/typing contract as the macOS app.
 

@@ -11,6 +11,7 @@
 #      overlay (walking its child processes), refocus it, and type:
 #        claude                     -> "[path] "  (bracketed)
 #        copilot / aider / opencode -> path (double-quoted if it has spaces) + " "
+#        gemini                     -> @"path" + " "  (always double-quoted)
 #        unknown                    -> "[path] "  (historical default)
 #
 # Usage: powershell -ExecutionPolicy Bypass -File hotshot-capture.ps1 [-NoType] [-Dir <folder>]

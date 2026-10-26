@@ -44,6 +44,32 @@ Describe 'Get-TargetCli' {
         Get-TargetCli 100 | Should -Be 'plain'
     }
 
+    It 'detects Gemini CLI by process name and by argv leaf' {
+        $script:ChildName = 'gemini.exe'
+        $script:ChildCommandLine = 'gemini'
+        Get-TargetCli 100 | Should -Be 'gemini'
+
+        $script:ChildName = 'pwsh.exe'
+        $script:ChildCommandLine = 'pwsh'
+        $script:GrandchildName = 'node.exe'
+        foreach ($cmd in @('node C:\Tools\gemini.js', 'C:\Tools\gemini.cmd', 'node C:\Tools\gemini.mjs')) {
+            $script:GrandchildCommandLine = $cmd
+            Get-TargetCli 100 | Should -Be 'gemini'
+        }
+    }
+
+    It 'returns plain when Gemini CLI shares a tree with copilot or claude' {
+        $script:ChildName = 'gemini.exe'
+        $script:ChildCommandLine = 'gemini'
+        $script:GrandchildName = 'copilot.exe'
+        $script:GrandchildCommandLine = 'copilot'
+        Get-TargetCli 100 | Should -Be 'plain'
+
+        $script:GrandchildName = 'claude.exe'
+        $script:GrandchildCommandLine = 'claude'
+        Get-TargetCli 100 | Should -Be 'plain'
+    }
+
     It 'prefers the escaped path when both claude and plain CLIs are present' {
         $script:ChildName = 'aider.exe'
         $script:ChildCommandLine = 'aider'
@@ -225,8 +251,18 @@ Describe 'Get-HotshotTypedText' {
         Get-HotshotTypedText -ShotPath 'C:\My Shots\one.png' -Cli plain | Should -Be '"C:\My Shots\one.png" '
     }
 
+    It 'always double-quotes the Gemini @path form, keeping spaces inside one pair of quotes' {
+        Get-HotshotTypedText -ShotPath 'C:\Shots\one.png' -Cli gemini | Should -Be '@"C:\Shots\one.png" '
+        Get-HotshotTypedText -ShotPath 'C:\My Shots\shot 1.png' -Cli gemini | Should -Be '@"C:\My Shots\shot 1.png" '
+        Get-HotshotTypedText -ShotPath 'C:\Shots\a&b$c.png' -Cli gemini | Should -Be '@"C:\Shots\a&b$c.png" '
+    }
+
+    It 'refuses the Gemini form for a literal double quote' {
+        Get-HotshotTypedText -ShotPath 'C:\Shots\a"b.png' -Cli gemini | Should -Be ''
+    }
+
     It 'refuses paths containing control characters (macOS parity)' {
-        foreach ($cli in @('claude', 'plain', 'unknown')) {
+        foreach ($cli in @('claude', 'plain', 'gemini', 'unknown')) {
             Get-HotshotTypedText -ShotPath "C:\Shots\evil`r`n\one.png" -Cli $cli | Should -Be ''
             Get-HotshotTypedText -ShotPath "C:\Shots\evil`t\one.png" -Cli $cli | Should -Be ''
             Get-HotshotTypedText -ShotPath ("C:\Shots\evil" + [char]0x7F + "\one.png") -Cli $cli | Should -Be ''

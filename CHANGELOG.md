@@ -6,7 +6,8 @@ All notable changes to hotshot are documented in this file. The format is based 
 
 ### Added
 
-- macOS and Linux: Gemini CLI is recognised and gets its `@path` form (`@` plus the backslash-escaped path) instead of the bracketed fallback (#307). Windows keeps the fallback.
+- macOS and Linux: Gemini CLI is recognised and gets its `@path` form (`@` plus the backslash-escaped path) instead of the bracketed fallback (#307).
+- Windows: Gemini CLI is recognised and gets `@"path"` (`@` plus the always double-quoted raw path), which Gemini CLI accepts on win32 without backslash unescaping (follow-up to #307).
 - Menu action "Use macOS default folder" (shown while a custom screenshot folder is set) reverts the override, and the `Save to:` line now says whether the folder is the macOS default or custom (#297).
 - Homebrew install via the `hivecommons/homebrew-hive` tap: `brew install hivecommons/hive/hotshot`; the README Install section now leads with it.
 

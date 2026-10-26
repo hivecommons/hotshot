@@ -21,6 +21,7 @@ function Get-TargetCli {
 
     $sawPlain = $false
     $sawClaude = $false
+    $sawGemini = $false
     $queue = [System.Collections.Generic.Queue[uint32]]::new()
     $queue.Enqueue($RootPid)
     $seen = @{}
@@ -33,6 +34,7 @@ function Get-TargetCli {
             $name = if ($pr.Name) { $pr.Name.ToLower() } else { '' }
             $cmd = if ($pr.CommandLine) { $pr.CommandLine.ToLower() } else { '' }
             if ($name -eq 'claude.exe') { $sawClaude = $true }
+            if ($name -eq 'gemini.exe') { $sawGemini = $true }
             if ($name -in @('copilot.exe', 'aider.exe', 'opencode.exe')) { $sawPlain = $true }
             # Tokenize quote-aware so a space inside a quoted path ("claude projects")
             # cannot produce a bare 'claude' token.
@@ -41,16 +43,20 @@ function Get-TargetCli {
                 $leaf = ($token -split '[\\/]')[-1] -replace '\.(exe|cmd|bat|ps1|mjs|js|cjs)$', ''
                 if ($leaf -eq 'claude' -or $leaf -eq 'claude-code') { $sawClaude = $true }
                 if ($leaf -in @('copilot', 'aider', 'opencode')) { $sawPlain = $true }
+                if ($leaf -eq 'gemini') { $sawGemini = $true }
             }
         }
         $kids = $byParent["$p"]
         if ($kids) { foreach ($k in $kids) { $queue.Enqueue([uint32]$k.ProcessId) } }
     }
-    # Both in one tree means a multi-tab terminal server with an unknown focused
-    # tab; the escaped path is accepted by every CLI, so prefer it.
-    if ($sawClaude -and $sawPlain) { return 'plain' }
+    # Two or more different known CLIs in one tree means a multi-tab terminal
+    # server with an unknown focused tab; the plain path is accepted by every
+    # CLI, so prefer it.
+    $kinds = @($sawClaude, $sawPlain, $sawGemini | Where-Object { $_ }).Count
+    if ($kinds -ge 2) { return 'plain' }
     if ($sawClaude) { return 'claude' }
     if ($sawPlain) { return 'plain' }
+    if ($sawGemini) { return 'gemini' }
     return 'unknown'
 }
 
@@ -66,7 +72,7 @@ function Get-HotshotTypedText {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string]$ShotPath,
-        [Parameter(Mandatory)] [ValidateSet('claude', 'plain', 'unknown')] [string]$Cli
+        [Parameter(Mandatory)] [ValidateSet('claude', 'plain', 'gemini', 'unknown')] [string]$Cli
     )
 
     # Parity with the macOS app (HotshotCore.containsControlCharacters): a
@@ -85,6 +91,13 @@ function Get-HotshotTypedText {
             # whitespace or a shell metacharacter.
             if ($ShotPath -match '[\s&;|<>!()^%]') { return '"' + $ShotPath + '" ' }
             return $ShotPath + ' '
+        }
+        'gemini' {
+            # Gemini CLI on win32 takes a double-quoted @path and does no
+            # backslash unescaping; always quote, since the unquoted parser
+            # stops at punctuation. A literal quote would end the string early.
+            if ($ShotPath -match '"') { return '' }
+            return '@"' + $ShotPath + '" '
         }
         default {
             # The bracketed form is typed verbatim into an unknown shell, so it

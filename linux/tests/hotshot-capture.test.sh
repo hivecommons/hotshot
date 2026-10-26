@@ -197,13 +197,17 @@ check "unique_shot_path: earlier captures are left intact" $ok
 # ==============================================================================
 # descendants / classify_cli against a real /proc tree
 # ==============================================================================
-# Build fake CLI binaries: copies of sleep whose /proc/<pid>/comm will read
-# "claude", "copilot", etc.
+# Build fake CLI binaries whose /proc/<pid>/comm will read "claude",
+# "copilot", etc. The kernel names a shebang-run script after the script
+# file, so a tiny bash wrapper around sleep carries the right comm on any
+# distro. Copying the sleep binary does not: on Ubuntu 26.04 (Rust coreutils)
+# the copy does not behave as sleep under another name, the tree dies at
+# once, and every comm-based classification silently sees only the root.
 FAKEBIN="$TMP/fakebin"
 mkdir -p "$FAKEBIN"
-SLEEP_BIN="$(command -v sleep)"
 for name in claude copilot aider opencode gemini; do
-    cp "$SLEEP_BIN" "$FAKEBIN/$name"
+    printf '#!/bin/bash\nsleep "$@"\n' >"$FAKEBIN/$name"
+    chmod +x "$FAKEBIN/$name"
 done
 
 spawn_tree() { # $1 = CLI binary to run as a grandchild; echoes root pid

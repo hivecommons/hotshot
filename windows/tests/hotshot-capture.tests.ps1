@@ -47,6 +47,8 @@ Describe 'Get-TargetCli' {
     It 'detects Gemini CLI by process name and by argv leaf' {
         $script:ChildName = 'gemini.exe'
         $script:ChildCommandLine = 'gemini'
+        $script:GrandchildName = 'pwsh.exe'
+        $script:GrandchildCommandLine = 'pwsh'
         Get-TargetCli 100 | Should -Be 'gemini'
 
         $script:ChildName = 'pwsh.exe'

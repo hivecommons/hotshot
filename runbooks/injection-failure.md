@@ -37,6 +37,27 @@ Diagnostics are stable event names and severities. Set `HOTSHOT_VERBOSE_LOGGING=
 
 If no event is logged at all, hotshot is probably not running: relaunch it and look for `app.launched`.
 
+### Informational events (macOS)
+
+These info-level events show how far capture and injection progressed; they do not by themselves prove that anything appeared in the terminal. Match any following warning or error against the table above. Values such as terminal names and paths are redacted unless verbose logging is enabled.
+
+| Event | Meaning | Triage use |
+|---|---|---|
+| `target.seeded` | The frontmost app was a supported terminal and became the initial target. | Confirms a target was selected; check the terminal name in verbose logs if delivery goes to an unexpected session. |
+| `target.found_running` | No frontmost terminal was available, so a running supported terminal became the target. | Focus the intended terminal to update the target before retrying. |
+| `target.changed` | A supported terminal was activated and recorded as the target. | Confirms which terminal activation updated the target; its name is visible in verbose logs. |
+| `target.terminated` | The tracked terminal quit (or was found no longer running), so its target was cleared. | Focus a running terminal before retrying; otherwise capture can reach a no-terminal warning. |
+| `clipboard.watch_started` | Clipboard polling started. | Confirms clipboard watch mode is active; look for an image-detected event after copying a new image. |
+| `clipboard.watch_stopped` | Clipboard polling was stopped or reset before starting again. | Normal during a restart of polling. If no start follows, enable clipboard watch mode before expecting automatic injection. |
+| `clipboard.image_detected` | A clipboard change containing an image reached the injection coordinator; the detail includes its change count. | Detection precedes saving/enriching the clipboard and target lookup; inspect subsequent events for save, trust or target failures. |
+| `clipboard.manual_inject` | The manual clipboard-injection action found a target and an image and is about to save/enrich it. | Confirms the menu action reached the attempt stage; it can still be refused if enrichment fails. |
+| `screenshot.inject_last` | The manual last-screenshot action found a target and a screenshot file and is about to inject its path. | The selected path is visible in verbose logs; inspect following injection events for the outcome. |
+| `watcher.stopped` | The screenshot-folder watch was stopped or reset before starting again. | Normal during startup or a directory rebind. If no start follows, enable screenshot watch mode and check for an open failure. |
+| `watcher.new_files` | A debounced folder check found new screenshot filenames, before quarantine and age filtering. | Normal logs show a count; verbose logs add filenames. A nonzero count does not guarantee an injectable screenshot; check for skipped-file warnings. |
+| `terminal.cli_detected` | Path injection resolved the target CLI and its path format. | Check the logged CLI when the typed format is unexpected; a preceding tty warning means detection fell back to the bracketed default. |
+| `injection.ctrl_v` | A Ctrl-V injection attempt is about to run against the tracked terminal. | Confirms paste was attempted, not completed; check for a following focus-loss warning or AppleScript error. |
+| `applescript.result` (verbose-only) | An AppleScript completed successfully; the detail is its string result, or `(none)`. | Can come from injection, focus or notification scripts. Correlate with nearby events and verify terminal contents rather than treating it alone as proof of delivery. |
+
 ## 3. Verify recovery
 
 1. Take a fresh screenshot while the target terminal is focused.

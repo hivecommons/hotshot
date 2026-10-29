@@ -228,14 +228,44 @@ fi
 # Walk /proc descendants of the focused terminal's PID and classify the AI
 # CLI, mirroring the macOS `ps -t <tty>` inspection.
 descendants() { # $1 = root pid
-    local queue=("$1") pid kids k
+    local queue=("$1") pid kids k warned=0
     while [ "${#queue[@]}" -gt 0 ]; do
         pid="${queue[0]}"
         queue=("${queue[@]:1}")
         echo "$pid"
-        kids="$(cat "/proc/$pid/task/"*/children 2>/dev/null || true)"
+        # The children files exist only with CONFIG_PROC_CHILDREN=y; when they
+        # are absent (cat fails, unlike an empty file) use the fallback.
+        if ! kids="$(cat "/proc/$pid/task/"*/children 2>/dev/null)"; then
+            if ! kids="$(children_fallback "$pid")"; then
+                if [ "$warned" = 0 ]; then
+                    log_event WARN cli.detection_unavailable "no usable process-tree source; CLI detection may be wrong"
+                    warned=1
+                fi
+                kids=""
+            fi
+        fi
         for k in $kids; do queue+=("$k"); done
     done
+}
+
+# Child pids of $1 without /proc/*/children: pgrep, else one pass over
+# /proc/[0-9]*/stat (ppid is field 4, counted after the last ")" in comm).
+# Returns non-zero only when neither source is usable.
+children_fallback() { # $1 = pid
+    local target="$1" rc f stat rest fields ok=1
+    if have pgrep; then
+        pgrep -P "$target" 2>/dev/null
+        rc=$?
+        [ "$rc" -lt 2 ] && return 0
+    fi
+    for f in /proc/[0-9]*/stat; do
+        stat="$(cat "$f" 2>/dev/null)" || continue
+        ok=0
+        rest="${stat##*) }"
+        read -r -a fields <<<"$rest"
+        [ "${fields[1]:-}" = "$target" ] && { f="${f#/proc/}"; echo "${f%/stat}"; }
+    done
+    return "$ok"
 }
 
 # A tree with both claude and a plain-path CLI is a multi-tab terminal server

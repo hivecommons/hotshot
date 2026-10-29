@@ -64,6 +64,9 @@ eval "$(extract_fn has_control_chars)"
 eval "$(extract_fn has_shell_metachars)"
 eval "$(extract_fn default_pictures_dir)"
 eval "$(extract_fn normalize_shot_dir)"
+eval "$(extract_fn have)"
+eval "$(extract_fn log_event)"
+eval "$(extract_fn children_fallback)"
 eval "$(extract_fn descendants)"
 eval "$(extract_fn classify_cli)"
 eval "$(extract_fn log_event)"
@@ -1391,6 +1394,30 @@ CHILD_PIDS+=("$arg_root")
 sleep 0.3
 assert_eq "classify_cli: copilot sibling of a 'claude <x>' argument -> plain" \
     "plain" "$(classify_cli "$arg_root")"
+
+# Kernels without CONFIG_PROC_CHILDREN: the children files are absent, so the
+# tree must still be walked via pgrep, then via /proc/*/stat.
+setsid bash -c '"$1" 300 & exec -a "$0" sleep 300' "$FAKEBIN/claude" "$FAKEBIN/claude" >/dev/null 2>&1 &
+nc_root=$!
+CHILD_PIDS+=("$nc_root")
+sleep 0.3
+cat() {
+    case "$*" in */children*) return 1 ;; esac
+    command cat "$@"
+}
+[ "$(descendants "$nc_root" 2>/dev/null | wc -l)" -ge 2 ]
+check "descendants: pgrep fallback without children files walks the tree" $?
+assert_eq "classify_cli: no children files -> claude via pgrep fallback" \
+    "claude" "$(classify_cli "$nc_root" 2>/dev/null)"
+have() { [ "$1" != pgrep ] && command -v "$1" >/dev/null 2>&1; }
+[ "$(descendants "$nc_root" 2>/dev/null | wc -l)" -ge 2 ]
+check "descendants: /proc stat fallback without children files or pgrep" $?
+cat() { return 1; }
+warn="$(descendants "$nc_root" 2>&1 >/dev/null)"
+case "$warn" in *"WARN cli.detection_unavailable"*) rc=0 ;; *) rc=1 ;; esac
+check "descendants: WARN cli.detection_unavailable when no source is usable" "$rc"
+unset -f cat
+eval "$(extract_fn have)"
 
 # ==============================================================================
 echo

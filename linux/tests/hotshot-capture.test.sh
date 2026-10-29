@@ -1423,6 +1423,8 @@ eval "$(extract_fn have)"
 NOCHILD="$TMP/nochildstubs"
 mkdir -p "$NOCHILD"
 cp "$NOTIFYSTUBS"/* "$NOCHILD/"
+# the notify-die test above left a failing maim in NOTIFYSTUBS; capture must succeed here
+cp "$STUBS/maim" "$NOCHILD/maim"
 cat >"$NOCHILD/cat" <<'EOF'
 #!/usr/bin/env bash
 for a in "$@"; do case "$a" in */children) exit 1 ;; esac; done

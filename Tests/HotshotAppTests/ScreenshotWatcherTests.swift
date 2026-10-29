@@ -516,4 +516,50 @@ final class ScreenshotWatcherTests: XCTestCase {
 
         XCTAssertTrue(events.isEmpty)
     }
+
+    // MARK: - Recover from a failed start (#327)
+
+    /// A `start()` that cannot open the folder leaves no live watch; the
+    /// reconcile timer must re-arm it once the folder becomes openable.
+    func testReconcileRetriesAStartThatFailedToOpenTheFolder() throws {
+        let blocker = try writeFile("not-a-directory")
+        let target = (blocker as NSString).appendingPathComponent("screenshots")
+        let watcher = makeWatcher(screenshotDirectory: { target })
+        let fired = expectation(description: "recovered watch injects a new screenshot")
+        var injected: [String] = []
+        watcher.onNewScreenshot = {
+            injected.append($0)
+            fired.fulfill()
+        }
+
+        watcher.start()
+        defer { watcher.stop() }
+        XCTAssertEqual(events.filter { $0.event == "watcher.open_failed" }.count, 1)
+        XCTAssertNil(events.first { $0.event == "watcher.started" })
+
+        // Still unopenable: the retry fails again and stays armed for the next tick.
+        watcher.reconcileDirectory()
+        XCTAssertEqual(events.filter { $0.event == "watcher.open_failed" }.count, 2)
+        XCTAssertNil(events.first { $0.event == "watcher.started" })
+
+        // The folder becomes openable (the blocking file goes away).
+        try FileManager.default.removeItem(atPath: blocker)
+        watcher.reconcileDirectory()
+        XCTAssertEqual(events.filter { $0.event == "watcher.started" }.map(\.path), [target])
+
+        let fresh = try writeFile("Screenshot 2026-10-15 at 10.00.03.png", in: target)
+        wait(for: [fired], timeout: WATCH_DEBOUNCE_SECONDS + 5)
+        XCTAssertEqual(injected, [fresh])
+    }
+
+    func testReconcileAfterStopDoesNotRestartTheWatch() {
+        let watcher = makeWatcher()
+
+        watcher.start()
+        watcher.stop()
+        events = []
+        watcher.reconcileDirectory()
+
+        XCTAssertTrue(events.isEmpty)
+    }
 }

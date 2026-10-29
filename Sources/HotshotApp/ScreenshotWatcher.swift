@@ -19,6 +19,10 @@ public final class ScreenshotWatcher {
     /// not watching. `screenshotDirectory` can change underneath a running
     /// watch (e.g. the macOS location default), so the diff must not re-read it.
     private var watchedDirectory: String?
+    /// Whether the caller wants a watch (set by the public `start()`, cleared
+    /// by the public `stop()`), tracked apart from the live fd so a `start()`
+    /// that failed to open the folder is retried by `reconcileDirectory()`.
+    private var wantsWatch = false
 
     /// Called with the full path of a new, injectable screenshot.
     public var onNewScreenshot: ((_ path: String) -> Void)?
@@ -35,14 +39,15 @@ public final class ScreenshotWatcher {
         self.visibilityDate = visibilityDate
     }
 
-    deinit { stop() }
+    deinit { teardown() }
 
     private var directory: String {
         (screenshotDirectory() as NSString).expandingTildeInPath
     }
 
     public func start() {
-        stop()
+        wantsWatch = true
+        teardown()
 
         let dir = directory
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
@@ -76,12 +81,18 @@ public final class ScreenshotWatcher {
     }
 
     /// Re-binds the watch when the folder closure now names a different
-    /// folder than the one the live fd is bound to; no-op when not watching.
-    /// The new folder is probed before the live watch is torn down, so a
-    /// folder that cannot be opened leaves the existing watch in place
-    /// (`watcher.open_failed` names the folder that was refused).
+    /// folder than the one the live fd is bound to; no-op when watching was
+    /// never requested (or has been stopped). When watching is wanted but no
+    /// watch is live (the last `start()` could not open the folder), it
+    /// retries `start()`. The new folder is probed before the live watch is
+    /// torn down, so a folder that cannot be opened leaves the existing watch
+    /// in place (`watcher.open_failed` names the folder that was refused).
     public func reconcileDirectory() {
-        guard source != nil else { return }
+        guard wantsWatch else { return }
+        guard source != nil else {
+            start()
+            return
+        }
         let dir = directory
         guard dir != watchedDirectory else { return }
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
@@ -96,6 +107,13 @@ public final class ScreenshotWatcher {
     }
 
     public func stop() {
+        wantsWatch = false
+        teardown()
+    }
+
+    /// Drops the live watch and its debounce timer without clearing the
+    /// caller's intent to watch (`start()` re-binds through it).
+    private func teardown() {
         debounceTimer?.cancel()
         debounceTimer = nil
         source?.cancel()

@@ -4,6 +4,10 @@ All notable changes to hotshot are documented in this file. The format is based 
 
 ## [Unreleased]
 
+### Fixed
+
+- macOS: a screenshot watch whose first `start()` could not open the folder (not yet creatable, privacy permission not yet granted, volume not mounted) is now retried by the 30 s reconcile timer instead of staying dead until auto-watch is toggled or the app relaunched; the same retry re-arms a watch lost to a failed folder rebind (#327).
+
 ## [0.2.0] - 2026-10-29
 
 ### Added

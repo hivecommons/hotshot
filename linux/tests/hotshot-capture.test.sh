@@ -1404,19 +1404,63 @@ cat() {
     case "$*" in */children*) return 1 ;; esac
     command cat "$@"
 }
-[ "$(descendants "$nc_root" 2>/dev/null | wc -l)" -ge 2 ]; rc=$?
-check "descendants: pgrep fallback without children files walks the tree" "$rc"
+ok=1; [ "$(descendants "$nc_root" 2>/dev/null | wc -l)" -ge 2 ] && ok=0
+check "descendants: pgrep fallback without children files walks the tree" "$ok"
 assert_eq "classify_cli: no children files -> claude via pgrep fallback" \
     "claude" "$(classify_cli "$nc_root" 2>/dev/null)"
 have() { [ "$1" != pgrep ] && command -v "$1" >/dev/null 2>&1; }
-[ "$(descendants "$nc_root" 2>/dev/null | wc -l)" -ge 2 ]; rc=$?
-check "descendants: /proc stat fallback without children files or pgrep" "$rc"
+ok=1; [ "$(descendants "$nc_root" 2>/dev/null | wc -l)" -ge 2 ] && ok=0
+check "descendants: /proc stat fallback without children files or pgrep" "$ok"
 cat() { return 1; }
 warn="$(descendants "$nc_root" 2>&1 >/dev/null)"
-case "$warn" in *"[WARN] cli.detection_unavailable"*) rc=0 ;; *) rc=1 ;; esac
-check "descendants: WARN cli.detection_unavailable when no source is usable" "$rc"
+case "$warn" in *"[WARN] cli.detection_unavailable"*) ok=0 ;; *) ok=1 ;; esac
+check "descendants: WARN cli.detection_unavailable when no source is usable" "$ok"
 unset -f cat
 eval "$(extract_fn have)"
+
+# The same three paths end to end: the real script, with a cat stub on PATH
+# that fails on the children files the way a missing file does.
+NOCHILD="$TMP/nochildstubs"
+mkdir -p "$NOCHILD"
+cp "$NOTIFYSTUBS"/* "$NOCHILD/"
+cat >"$NOCHILD/cat" <<'EOF'
+#!/usr/bin/env bash
+for a in "$@"; do case "$a" in */children) exit 1 ;; esac; done
+exec /bin/cat "$@"
+EOF
+chmod +x "$NOCHILD/cat"
+nc_e2e_root="$(spawn_tree claude)"
+
+rm -f "$NOTIFYLOG"
+run_e2e_stubs "$NOCHILD" "$nc_e2e_root" --full >/dev/null
+rc=$?
+assert_eq "e2e no children files (pgrep): exit 0" "0" "$rc"
+assert_eq "e2e no children files (pgrep): notification names claude" \
+    "hotshot Screenshot captured (CLI: claude)" "$(cat "$NOTIFYLOG")"
+
+printf '#!/usr/bin/env bash\nexit 3\n' >"$NOCHILD/pgrep"
+chmod +x "$NOCHILD/pgrep"
+rm -f "$NOTIFYLOG"
+run_e2e_stubs "$NOCHILD" "$nc_e2e_root" --full >/dev/null
+rc=$?
+assert_eq "e2e no children files (/proc stat): exit 0" "0" "$rc"
+assert_eq "e2e no children files (/proc stat): notification names claude" \
+    "hotshot Screenshot captured (CLI: claude)" "$(cat "$NOTIFYLOG")"
+
+# Neither source usable (pgrep broken, /proc/*/stat unreadable) -> one warning.
+cat >"$NOCHILD/cat" <<'EOF'
+#!/usr/bin/env bash
+for a in "$@"; do case "$a" in */children | /proc/*/stat) exit 1 ;; esac; done
+exec /bin/cat "$@"
+EOF
+rm -f "$NOTIFYLOG"
+err="$(run_e2e_stubs "$NOCHILD" "$nc_e2e_root" --full 2>&1 >/dev/null)"
+rc=$?
+assert_eq "e2e no process-tree source: exit 0" "0" "$rc"
+case "$err" in *"[WARN] cli.detection_unavailable"*) ok=0 ;; *) ok=1 ;; esac
+check "e2e no process-tree source: WARN cli.detection_unavailable emitted once" "$ok"
+ok=1; [ "$(grep -c "cli.detection_unavailable" <<<"$err")" -eq 1 ] && ok=0
+check "e2e no process-tree source: warning not repeated per pid" "$ok"
 
 # ==============================================================================
 echo

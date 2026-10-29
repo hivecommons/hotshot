@@ -78,7 +78,7 @@ Releases are tagged with `v`-prefixed semantic versions; see the [latest release
 ```bash
 git clone https://github.com/hivecommons/hotshot.git
 cd hotshot
-git checkout v0.1.0
+git checkout v0.2.0
 swift build -c release
 sudo cp .build/release/hotshot /usr/local/bin/
 ```

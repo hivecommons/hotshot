@@ -4,8 +4,6 @@ All notable changes to hotshot are documented in this file. The format is based 
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-10-28
-
 ### Added
 
 - macOS and Linux: Gemini CLI is recognised and gets its `@path` form (`@` plus the backslash-escaped path) instead of the bracketed fallback (#307).
@@ -37,6 +35,5 @@ First tagged release. Full auto-generated notes are on the [GitHub Release](http
 - Hermetic Linux and Windows test suites and extracted `HotshotCore` helpers for shared macOS decision logic.
 - Runbooks for injection failures, release rollback and postmortems.
 
-[Unreleased]: https://github.com/hivecommons/hotshot/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/hivecommons/hotshot/compare/v0.1.0...v0.2.0
+[Unreleased]: https://github.com/hivecommons/hotshot/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/hivecommons/hotshot/releases/tag/v0.1.0

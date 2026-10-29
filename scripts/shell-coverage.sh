@@ -72,7 +72,8 @@ extract_hits <"$TRACE" >"$WORK/hits"
 # Prints the executable line numbers of $1, one per line. Skips what xtrace
 # never reports: blanks, comments, bare block keywords, `done` with a loop
 # redirect, function-definition lines, and case pattern lines (including
-# patterns that quote parentheses) — none of these can ever be "covered".
+# patterns that quote parentheses, and `pattern) ;;` arms with an empty
+# body) — none of these can ever be "covered".
 executable_lines() {
     awk '
         heredoc != "" {
@@ -88,6 +89,11 @@ executable_lines() {
         /^[[:space:]]*done[[:space:]]*<.*$/ { next }
         /^[[:space:]]*(function[[:space:]]+)?[A-Za-z_][A-Za-z_0-9]*[[:space:]]*\(\)[[:space:]]*(\{[[:space:]]*(#.*)?)?$/ { next }
         in_case && /\)[[:space:]]*$/ && !/\$\(/ && !/=\(/ && !/<\(/ && !/^[[:space:]]*\(/ { next }
+        in_case && /;;[[:space:]]*$/ && !/\$\(/ && !/=\(/ && !/<\(/ && !/^[[:space:]]*\(/ {
+            arm = $0
+            sub(/[[:space:]]*;;[[:space:]]*$/, "", arm)
+            if (arm ~ /\)$/) next
+        }
         /^[[:space:]]*case[[:space:]]/ { in_case = 1 }
         {
             print NR
@@ -122,6 +128,7 @@ case "$x" in
     "b)")
         z=$(true) ;;
     c|d) w=1 ;;
+    e) ;;
     *)
         : ;;
 esac
@@ -144,7 +151,7 @@ fi
 }
 FIXEOF
 got="$(executable_lines "$WORK/classify.sh" | tr '\n' ' ')"
-want='4 6 9 11 13 16 17 19 21 24 27 28 30 31 33 36 '
+want='4 6 9 11 13 16 17 20 22 25 28 29 31 32 34 37 '
 if [ "$got" != "$want" ]; then
     echo "FAIL shell-coverage self-test: executable_lines gave '$got', want '$want'" >&2
     exit 1

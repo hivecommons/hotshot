@@ -27,18 +27,21 @@ This is the same clipboard/typing contract as the macOS app.
 
 ## Install
 
-```bash
-git clone https://github.com/hivecommons/hotshot.git
-cd hotshot/linux
-./install.sh                 # installs to ~/.local/bin/hotshot-capture
-./install.sh --gnome-hotkey  # also binds Ctrl+Shift+PrintScreen on GNOME
-./install.sh --prefix DIR    # install somewhere other than ~/.local/bin
-```
+First choose helpers for your desktop environment (DE: GNOME, KDE, sway, etc.)
+and display system. X11 and Wayland are two systems Linux uses to display
+windows. In a terminal, `echo "$XDG_SESSION_TYPE"` and
+`echo "$XDG_CURRENT_DESKTOP"` can help identify your session.
+The Wayland example below is for wlroots-based desktops such as sway and
+hyprland, not every Wayland desktop.
 
-The installer reports which dependencies are missing for your session type.
-Uninstall with `./install.sh --uninstall`.
+Before installing, read [focus tracking](#parity-notes): X11, sway and hyprland
+can identify the target window's process ID (PID). Other Wayland compositors
+cannot query focus here and use the bracketed default, typing into whichever
+window receives focus. Start with `--no-type` if that is unsuitable.
 
 ### Dependencies
+
+Install Git for the clone route and the helpers for **one** matching session type.
 
 | | X11 | Wayland |
 |---|---|---|
@@ -56,6 +59,20 @@ sudo apt install maim xclip xdotool
 # Wayland (wlroots: sway, hyprland, ...)
 sudo apt install grim slurp wl-clipboard wtype jq
 ```
+
+### Install the script
+
+```bash
+git clone https://github.com/hivecommons/hotshot.git
+cd hotshot/linux
+./install.sh                 # ordinary install: ~/.local/bin/hotshot-capture
+```
+
+Choose **one** installer variant. Instead of the last command, GNOME users
+can run `./install.sh --gnome-hotkey` to also bind Ctrl+Shift+PrintScreen.
+For a custom destination, use `./install.sh --prefix DIR` instead.
+The installer reports missing helpers for your session type.
+Uninstall from this checkout with `./install.sh --uninstall`.
 
 ## Hotkey binding
 
@@ -84,9 +101,17 @@ hotshot-capture [--region|--full] [--no-type] [--dir DIR]
 - `--no-type`: skip the typed injection (clipboard + file only)
 - `--dir DIR`: save screenshots to DIR (a relative path or leading `~` is resolved to an absolute path)
 
+For a first capture, focus the terminal with your signed-in AI CLI, press the
+bound hotkey, and select a harmless region. Confirm a PNG in the configured
+folder and a path in the terminal input; press Enter when ready. With
+`--no-type`, expect only the file and clipboard image. If capture fails, check
+the installer's missing-helper report and the dependencies for your session;
+if only typing fails, read [focus tracking](#parity-notes) and [Logging](#logging).
+
 ## Parity notes
 
-- **Clipboard**: X11/Wayland clipboards have a single owner and `xclip` /
+- **Clipboard**: MIME identifies a clipboard data format, such as `image/png`.
+  X11/Wayland clipboards have a single owner and `xclip` /
   `wl-copy` serve one MIME target per invocation, so by default the clipboard
   carries the **image only** (paste with Ctrl-V in Claude Code or GUI apps);
   the typed injection delivers the path. If [CopyQ](https://hluk.github.io/CopyQ/)

@@ -14,7 +14,14 @@ If you're like me, you use screenshots constantly to debug your work — a broke
 | **Linux** | Shell script (X11 & Wayland) | Hotkey you bind in your DE (e.g. Ctrl+Shift+Print) | `linux/install.sh` | [linux/README.md](linux/README.md) |
 | **Windows** | PowerShell script (+ optional AutoHotkey v2) | Global hotkey (default Ctrl+Alt+H) → Snipping overlay | `windows\install.ps1` | [windows/README.md](windows/README.md) |
 
-All platforms honor the same contract:
+Choose your platform's install guide above. A **CLI** is the command-line
+coding assistant running in your terminal; install and sign in to it first.
+
+<details>
+<summary>Advanced reference: cross-platform clipboard and process-detection contract</summary>
+
+All platforms honor the same contract (tty means terminal session; process-tree
+checks look for the CLI running inside that terminal):
 
 | | macOS | Linux | Windows |
 |---|---|---|---|
@@ -28,6 +35,8 @@ All platforms honor the same contract:
 | Gemini CLI → `@` + escaped path | ✅ backslash-escaped | ✅ backslash-escaped | `@"path"` (always double-quoted, no escaping); refused if it contains `"` |
 | Unknown CLI → bracketed default | ✅ | ✅ | ✅ |
 
+</details>
+
 The rest of this page documents the **macOS** app.
 
 ## What it looks like
@@ -37,14 +46,16 @@ The rest of this page documents the **macOS** app.
 2. You switch to a browser and spot a bug
 3. Take a screenshot the way you always do
 4. hotshot detects the new file and injects the path into your terminal session
-5. Your AI assistant reads the image and starts helping
+5. Review the pasted path and press Return to submit it; **Auto-press Return is off by default**
 
 **Clipboard mode (⌃⌘⇧3 / ⌃⌘⇧4):**
 1. Take a screenshot to clipboard (Control-Command-Shift instead of Command-Shift)
-2. hotshot detects the new clipboard image and sends Ctrl-V to your terminal
-3. No files created — the image goes straight from clipboard to your AI assistant
+2. hotshot saves a PNG copy in your screenshot folder, then sends Ctrl-V to your terminal
+3. Whether your assistant receives image data or a path depends on the CLI and paste method; review the input and submit it when ready
 
-Clipboard mode is ideal for remote sessions (tmux, zellij, OpenShell) where there's no shared filesystem.
+Clipboard mode can help with remote sessions (tmux, zellij, OpenShell) when
+image clipboard data is shared. A local file path alone will not make the
+image available on a remote machine. The saved PNG remains on your Mac.
 
 No dragging files around. No copy-pasting paths. No "here let me find where that screenshot went."
 
@@ -100,6 +111,14 @@ To go back to an earlier build after a bad update, see [runbooks/release-rollbac
 ### First-time setup
 
 macOS will ask for Accessibility permission the first time — this lets hotshot type the path into your terminal. Grant it in System Settings > Privacy & Security. You only have to do this once.
+
+For a first check, start your coding assistant in a supported terminal and click
+that terminal once so hotshot knows its target. Capture a harmless test image.
+Expect a saved PNG and an image or path in the terminal input; review it before
+pressing Return. If nothing arrives, check the camera icon and Accessibility
+permission, then follow [injection failure recovery](runbooks/injection-failure.md).
+Accessibility allows hotshot to control keyboard input, so enable it only for a
+build you trust.
 
 ## How it works
 

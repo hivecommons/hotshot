@@ -18,6 +18,9 @@ built-in Snipping Tool overlay, and hotshot:
    in the foreground again — types the format that
    CLI understands:
 
+<details>
+<summary>Advanced reference: CLI process detection and Windows path formats</summary>
+
 | CLI in focused terminal | Typed injection |
 |---|---|
 | Claude Code (`claude`) | `[C:\path\to\shot.png] ` (bracketed) |
@@ -29,9 +32,17 @@ Two or more of claude / copilot / aider / opencode / gemini in the same terminal
 
 This is the same clipboard/typing contract as the macOS app.
 
+</details>
+
 ## Install
 
-Everything uses built-in Windows components (PowerShell 5.1+, Snipping Tool).
+Capture uses built-in Windows components (PowerShell 5.1+, Snipping Tool on
+Windows 10 1809+). The clone route also requires Git. Have a supported coding
+assistant installed and signed in before your first capture.
+Run the following commands in **PowerShell**. `-ExecutionPolicy Bypass` applies
+to that PowerShell process only; it does not permanently change your policy.
+Review the downloaded scripts before allowing them to run, and respect any
+organization-enforced policy.
 
 ```powershell
 git clone https://github.com/hivecommons/hotshot.git
@@ -47,9 +58,10 @@ are limited to Ctrl+Alt/Ctrl+Shift combos — pick another with
 ### Optional: AutoHotkey v2 for an instant hotkey
 
 Start Menu shortcut hotkeys can take a second to launch. If you have
-[AutoHotkey v2](https://www.autohotkey.com) installed, run
-`%LOCALAPPDATA%\Hotshot\hotshot.ahk` (or put a shortcut to it in
-`shell:startup`) and press **Ctrl+Shift+PrintScreen** instead.
+[AutoHotkey v2](https://www.autohotkey.com) installed, press Win+R and enter
+`%LOCALAPPDATA%\Hotshot\hotshot.ahk`. To launch it at sign-in, enter
+`shell:startup` in Win+R and put a shortcut to that file in the folder that
+opens. Press **Ctrl+Shift+PrintScreen** instead.
 
 ## Usage
 
@@ -59,11 +71,20 @@ Start Menu shortcut hotkeys can take a second to launch. If you have
 4. hotshot saves the PNG, loads the clipboard, refocuses your terminal, and
    types the path in the right format. Press Enter.
 
-Manual invocation:
+Confirm the PNG exists in your Pictures `hotshot` folder and the terminal input
+contains the path before submitting. If it does not, confirm you focused the
+terminal before capture and check [Logging](#logging); a focus failure can leave
+the file and clipboard intact without typing anything.
+
+Manual invocation from the **installed folder**, not the checkout:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File hotshot-capture.ps1 [-NoType] [-Dir C:\shots]
+cd "$env:LOCALAPPDATA\Hotshot"
+powershell -ExecutionPolicy Bypass -File .\hotshot-capture.ps1
 ```
+
+Optionally append `-NoType` to save and copy without typing, or `-Dir C:\shots`
+to choose a destination folder.
 
 ## Parity notes
 

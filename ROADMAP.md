@@ -9,7 +9,7 @@ the macOS app, Linux script, and Windows helper.
 - macOS, Linux, and Windows screenshot-to-terminal flows with CLI-aware text
   injection for Claude Code, GitHub Copilot CLI, aider, and opencode.
 - Clipboard enrichment with image data, file URLs, and shell-escaped text paths.
-- Hermetic Linux and Windows tests plus extracted `HotshotCore` helpers for
+- Isolated Linux and Windows tests (with external tools replaced by test doubles) plus extracted `HotshotCore` helpers for
   shared macOS decision logic.
 - First tagged release (v0.1.0) and a Homebrew install path via the
   `hivecommons/homebrew-hive` tap (`brew install hivecommons/hive/hotshot`).
@@ -19,9 +19,11 @@ the macOS app, Linux script, and Windows helper.
 1. **Package distribution:** extend first-class install paths beyond Homebrew
    on macOS, documenting follow-on candidates such as winget and distro
    packages.
-2. **Cross-platform parity:** keep Linux Wayland/X11 and Windows behavior aligned
+2. **Cross-platform parity (consistent behavior):** keep Linux Wayland/X11
+   (Linux display systems) and Windows behavior aligned
    with macOS for clipboard modes, typed injection, warning paths, and safe
-   degradation when helper tools are missing.
+   fallback when helper tools are missing, such as keeping the saved image
+   available even when typed injection cannot complete.
 3. **More terminal and agent targets:** expand detection and examples for
    terminals and AI CLIs as the ecosystem changes, while keeping unknown targets
    on safe, explicit fallback behavior.

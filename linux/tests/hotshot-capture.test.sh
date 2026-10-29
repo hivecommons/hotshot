@@ -389,6 +389,62 @@ case "$(cat "$TYPELOG")" in *'\ '*) check "e2e copilot: space in dir actually es
 shot="$(run_e2e "$plain_root" --full)"
 assert_eq "e2e unknown CLI: typed bracketed default" "[$shot] " "$(cat "$TYPELOG")"
 
+# Kernels without CONFIG_PROC_CHILDREN, end to end: a `cat` ahead of the real
+# one on PATH fails for the children files (an absent file, not an empty one),
+# so the script must still find claude via pgrep, then via /proc/*/stat, and
+# warn once when neither source works. These run the real script so the
+# fallback lines count toward the shell coverage floor.
+PROCSTUBS="$TMP/procstubs"
+mkdir -p "$PROCSTUBS/nochildren" "$PROCSTUBS/nopgrep" "$PROCSTUBS/nosource"
+cat >"$PROCSTUBS/nochildren/cat" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in */children*) exit 1 ;; esac
+exec /bin/cat "$@"
+EOF
+cp "$PROCSTUBS/nochildren/cat" "$PROCSTUBS/nopgrep/cat"
+printf '#!/usr/bin/env bash\nexit 3\n' >"$PROCSTUBS/nopgrep/pgrep"
+cat >"$PROCSTUBS/nosource/cat" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in */children*|/proc/*/stat) exit 1 ;; esac
+exec /bin/cat "$@"
+EOF
+cp "$PROCSTUBS/nopgrep/pgrep" "$PROCSTUBS/nosource/pgrep"
+chmod +x "$PROCSTUBS"/*/*
+
+run_e2e_proc() { # $1 = procstubs variant, $2 = focus pid; remaining args passed to the script
+    local variant="$1" focus="$2"
+    shift 2
+    rm -f "$TYPELOG" "$CLIPLOG"
+    env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" DISPLAY=:99 PATH="$PROCSTUBS/$variant:$STUBS:/usr/bin:/bin" \
+        HOTSHOT_DIR="$TMP/shots" HOTSHOT_TEST_FOCUS_PID="$focus" \
+        bash "$SCRIPT" "$@"
+}
+
+# gemini, because its "@path" form differs from the "[path]" an unknown CLI
+# gets: a claude tree would look identical whether or not detection worked.
+root="$(spawn_tree gemini)"
+shot="$(run_e2e_proc nochildren "$root" --full 2>"$TMP/e2e.err")"
+rc=$?
+assert_eq "e2e no children files: exit 0" "0" "$rc"
+assert_eq "e2e no children files: gemini found via pgrep, @path typed" "@$shot " "$(cat "$TYPELOG")"
+grep -q "cli.detection_unavailable" "$TMP/e2e.err"
+check "e2e no children files: no detection warning when pgrep works" $(( ! $? ))
+
+shot="$(run_e2e_proc nopgrep "$root" --full 2>"$TMP/e2e.err")"
+rc=$?
+assert_eq "e2e no children files, no pgrep: exit 0" "0" "$rc"
+assert_eq "e2e no children files, no pgrep: gemini found via /proc stat, @path typed" "@$shot " "$(cat "$TYPELOG")"
+grep -q "cli.detection_unavailable" "$TMP/e2e.err"
+check "e2e no children files, no pgrep: no detection warning when /proc stat works" $(( ! $? ))
+
+shot="$(run_e2e_proc nosource "$root" --full 2>"$TMP/e2e.err")"
+rc=$?
+assert_eq "e2e no process-tree source: exit 0 (detection is best-effort)" "0" "$rc"
+assert_eq "e2e no process-tree source: falls back to bracketed default" "[$shot] " "$(cat "$TYPELOG")"
+grep -q "\[WARN\] cli.detection_unavailable" "$TMP/e2e.err"
+check "e2e no process-tree source: WARN cli.detection_unavailable emitted" $?
+assert_eq "e2e no process-tree source: warned once, not once per pid" "1" "$(grep -c "cli.detection_unavailable" "$TMP/e2e.err")"
+
 # --no-type suppresses injection but still captures + clipboard.
 root="$(spawn_tree claude)"
 shot="$(run_e2e "$root" --full --no-type)"
@@ -1404,13 +1460,13 @@ cat() {
     case "$*" in */children*) return 1 ;; esac
     command cat "$@"
 }
-[ "$(descendants "$nc_root" 2>/dev/null | wc -l)" -ge 2 ]; rc=$?
-check "descendants: pgrep fallback without children files walks the tree" "$rc"
+ok=1; [ "$(descendants "$nc_root" 2>/dev/null | wc -l)" -ge 2 ] && ok=0
+check "descendants: pgrep fallback without children files walks the tree" $ok
 assert_eq "classify_cli: no children files -> claude via pgrep fallback" \
     "claude" "$(classify_cli "$nc_root" 2>/dev/null)"
 have() { [ "$1" != pgrep ] && command -v "$1" >/dev/null 2>&1; }
-[ "$(descendants "$nc_root" 2>/dev/null | wc -l)" -ge 2 ]; rc=$?
-check "descendants: /proc stat fallback without children files or pgrep" "$rc"
+ok=1; [ "$(descendants "$nc_root" 2>/dev/null | wc -l)" -ge 2 ] && ok=0
+check "descendants: /proc stat fallback without children files or pgrep" $ok
 cat() { return 1; }
 warn="$(descendants "$nc_root" 2>&1 >/dev/null)"
 case "$warn" in *"[WARN] cli.detection_unavailable"*) rc=0 ;; *) rc=1 ;; esac

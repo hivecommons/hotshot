@@ -65,7 +65,6 @@ eval "$(extract_fn has_shell_metachars)"
 eval "$(extract_fn default_pictures_dir)"
 eval "$(extract_fn normalize_shot_dir)"
 eval "$(extract_fn have)"
-eval "$(extract_fn log_event)"
 eval "$(extract_fn children_fallback)"
 eval "$(extract_fn descendants)"
 eval "$(extract_fn classify_cli)"
@@ -1405,16 +1404,16 @@ cat() {
     case "$*" in */children*) return 1 ;; esac
     command cat "$@"
 }
-[ "$(descendants "$nc_root" 2>/dev/null | wc -l)" -ge 2 ]
-check "descendants: pgrep fallback without children files walks the tree" $?
+[ "$(descendants "$nc_root" 2>/dev/null | wc -l)" -ge 2 ]; rc=$?
+check "descendants: pgrep fallback without children files walks the tree" "$rc"
 assert_eq "classify_cli: no children files -> claude via pgrep fallback" \
     "claude" "$(classify_cli "$nc_root" 2>/dev/null)"
 have() { [ "$1" != pgrep ] && command -v "$1" >/dev/null 2>&1; }
-[ "$(descendants "$nc_root" 2>/dev/null | wc -l)" -ge 2 ]
-check "descendants: /proc stat fallback without children files or pgrep" $?
+[ "$(descendants "$nc_root" 2>/dev/null | wc -l)" -ge 2 ]; rc=$?
+check "descendants: /proc stat fallback without children files or pgrep" "$rc"
 cat() { return 1; }
 warn="$(descendants "$nc_root" 2>&1 >/dev/null)"
-case "$warn" in *"WARN cli.detection_unavailable"*) rc=0 ;; *) rc=1 ;; esac
+case "$warn" in *"[WARN] cli.detection_unavailable"*) rc=0 ;; *) rc=1 ;; esac
 check "descendants: WARN cli.detection_unavailable when no source is usable" "$rc"
 unset -f cat
 eval "$(extract_fn have)"

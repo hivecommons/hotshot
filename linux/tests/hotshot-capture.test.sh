@@ -185,6 +185,8 @@ mkdir -p "$UNIQDIR"
 first="$(unique_shot_path "$UNIQDIR" 20260304-050607-123)"
 assert_eq "unique_shot_path: free name keeps the plain timestamp" \
     "$UNIQDIR/hotshot-20260304-050607-123.png" "$first"
+[ -e "$first" ] && ok=0 || ok=1
+check "unique_shot_path: the returned name is already reserved on disk" $ok
 printf 'PNG' >"$first"
 second="$(unique_shot_path "$UNIQDIR" 20260304-050607-123)"
 assert_eq "unique_shot_path: taken name gets a -1 suffix" \
@@ -193,8 +195,20 @@ printf 'PNG' >"$second"
 third="$(unique_shot_path "$UNIQDIR" 20260304-050607-123)"
 assert_eq "unique_shot_path: suffix keeps counting" \
     "$UNIQDIR/hotshot-20260304-050607-123-2.png" "$third"
-ok=1; [ "$(find "$UNIQDIR" -name 'hotshot-*.png' | wc -l)" -eq 2 ] && ok=0
+ok=1; [ "$(find "$UNIQDIR" -name 'hotshot-*.png' | wc -l)" -eq 3 ] && ok=0
 check "unique_shot_path: earlier captures are left intact" $ok
+ok=1; [ "$(cat "$first")$(cat "$second")" = "PNGPNG" ] && ok=0
+check "unique_shot_path: reserved names do not clobber existing content" $ok
+
+# Simulated race: a second shell reserves the name between probe and capture.
+RACEDIR="$TMP/race"
+mkdir -p "$RACEDIR"
+raced_a="$(unique_shot_path "$RACEDIR" 20260304-050607-124)"
+raced_b="$( (unique_shot_path "$RACEDIR" 20260304-050607-124) )"
+assert_eq "unique_shot_path: concurrent pick before capture gets a -1 suffix" \
+    "$RACEDIR/hotshot-20260304-050607-124-1.png" "$raced_b"
+assert_eq "unique_shot_path: the first reservation is untouched" \
+    "$RACEDIR/hotshot-20260304-050607-124.png" "$raced_a"
 
 # ==============================================================================
 # descendants / classify_cli against a real /proc tree

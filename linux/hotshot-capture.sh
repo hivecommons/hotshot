@@ -142,6 +142,9 @@ fi
 # captures in the same instant never overwrite each other (parity with the
 # macOS app and the Windows port). The name is reserved by atomically creating
 # an empty file (noclobber), so concurrent invocations cannot pick the same one.
+# The capture tool must therefore overwrite that empty file: maim and grim
+# truncate on open, but scrot >= 1.0 refuses to overwrite by default and would
+# silently write <name>_000.png instead, so it is always passed -o/--overwrite.
 unique_shot_path() { # $1 = directory, $2 = timestamp; echoes a path it just reserved
     local base="$1/hotshot-$2" path n=1
     path="$base.png"
@@ -169,9 +172,9 @@ if [ "$SESSION" = "x11" ]; then
         fi
     elif have scrot; then
         if [ "$MODE" = "region" ]; then
-            scrot -s "$SHOT_PATH" || die "capture cancelled or scrot failed"
+            scrot -o -s "$SHOT_PATH" || die "capture cancelled or scrot failed"
         else
-            scrot "$SHOT_PATH" || die "scrot failed"
+            scrot -o "$SHOT_PATH" || die "scrot failed"
         fi
     else
         die "no capture tool found — install 'maim' (recommended) or 'scrot'"

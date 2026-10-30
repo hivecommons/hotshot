@@ -200,12 +200,13 @@ check "unique_shot_path: earlier captures are left intact" $ok
 ok=1; [ "$(cat "$first")$(cat "$second")" = "PNGPNG" ] && ok=0
 check "unique_shot_path: reserved names do not clobber existing content" $ok
 
-# Simulated race: a second shell reserves the name between probe and capture.
+# An empty reservation (no PNG written yet) already blocks the name, so a
+# second invocation that lands between reserve and capture skips it.
 RACEDIR="$TMP/race"
 mkdir -p "$RACEDIR"
 raced_a="$(unique_shot_path "$RACEDIR" 20260304-050607-124)"
-raced_b="$( (unique_shot_path "$RACEDIR" 20260304-050607-124) )"
-assert_eq "unique_shot_path: concurrent pick before capture gets a -1 suffix" \
+raced_b="$(unique_shot_path "$RACEDIR" 20260304-050607-124)"
+assert_eq "unique_shot_path: an empty reservation pushes the next pick to -1" \
     "$RACEDIR/hotshot-20260304-050607-124-1.png" "$raced_b"
 assert_eq "unique_shot_path: the first reservation is untouched" \
     "$RACEDIR/hotshot-20260304-050607-124.png" "$raced_a"
@@ -504,14 +505,24 @@ ok=1; [ ! -e "$TYPELOG" ] && ok=0
 check "e2e capture failure: nothing typed" $ok
 mv "$STUBS/maim.ok" "$STUBS/maim"
 
-# X11 fallback: no maim on PATH -> scrot captures instead.
+# X11 fallback: no maim on PATH -> scrot captures instead. The stub mimics
+# scrot >= 1.0: without -o/--overwrite it refuses to clobber an existing file
+# and writes <name>_000.png instead (exit 0), so the capture must pass -o to
+# land in the pre-reserved path.
 SCROTSTUBS="$TMP/scrotstubs"
 mkdir -p "$SCROTSTUBS"
+SCROTLOG="$TMP/scrot.log"
 cp "$STUBS/xclip" "$STUBS/xdotool" "$SCROTSTUBS/"
-cat >"$SCROTSTUBS/scrot" <<'EOF'
+cat >"$SCROTSTUBS/scrot" <<EOF
 #!/usr/bin/env bash
-for out in "$@"; do :; done
-printf 'PNG' >"$out"
+echo "\$@" >>"$SCROTLOG"
+overwrite=0
+for a in "\$@"; do case "\$a" in -o|--overwrite) overwrite=1 ;; esac; done
+for out in "\$@"; do :; done
+if [ "\$overwrite" -eq 0 ] && [ -e "\$out" ]; then
+    out="\${out%.png}_000.png"
+fi
+printf 'PNG' >"\$out"
 EOF
 chmod +x "$SCROTSTUBS"/*
 root="$(spawn_tree claude)"
@@ -524,6 +535,10 @@ assert_eq "e2e scrot fallback: exit 0" "0" "$rc"
 ok=1; [ -s "$shot" ] && ok=0
 check "e2e scrot fallback: screenshot created via scrot" $ok
 assert_eq "e2e scrot fallback: typed bracketed path" "[$shot] " "$(cat "$TYPELOG")"
+case "$(cat "$SCROTLOG")" in -o*) ok=0 ;; *) ok=1 ;; esac
+check "e2e scrot fallback: scrot is passed -o to overwrite the reservation" $ok
+ok=1; [ -z "$(find "$TMP/shots" -name 'hotshot-*_000.png' 2>/dev/null)" ] && ok=0
+check "e2e scrot fallback: no stray _000 file left beside the reservation" $ok
 
 # ==============================================================================
 # end-to-end on a fake Wayland session (stubbed grim/slurp/wl-copy/wtype,
@@ -1147,24 +1162,18 @@ case "$out" in *"capture cancelled or maim failed"*) check "e2e x11 region cance
 ok=1; [ ! -e "$TYPELOG" ] && ok=0
 check "e2e x11 region cancelled: nothing typed" "$ok"
 
-# scrot fallback in region mode -> scrot -s.
+# scrot fallback in region mode -> scrot -o -s (same O_EXCL-mimicking stub).
 SCROTLOG="$TMP/scrot.log"
 SCROTREGION="$TMP/scrotregion"
 mkdir -p "$SCROTREGION"
-cp "$STUBS/xclip" "$STUBS/xdotool" "$SCROTREGION/"
-cat >"$SCROTREGION/scrot" <<EOF
-#!/usr/bin/env bash
-echo "\$@" >>"$SCROTLOG"
-for out in "\$@"; do :; done
-printf 'PNG' >"\$out"
-EOF
+cp "$STUBS/xclip" "$STUBS/xdotool" "$SCROTSTUBS/scrot" "$SCROTREGION/"
 chmod +x "$SCROTREGION"/*
 rm -f "$SCROTLOG"
 shot="$(run_e2e_stubs "$SCROTREGION" "$plain_root")"
 rc=$?
 assert_eq "e2e scrot region: exit 0" "0" "$rc"
-grep -q -- "^-s $shot\$" "$SCROTLOG"
-check "e2e scrot region: scrot called with -s" $?
+grep -q -- "^-o -s $shot\$" "$SCROTLOG"
+check "e2e scrot region: scrot called with -o -s" $?
 assert_eq "e2e scrot region: typed bracketed path" "[$shot] " "$(cat "$TYPELOG")"
 
 # scrot region cancelled -> die names scrot.

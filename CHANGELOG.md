@@ -8,6 +8,7 @@ All notable changes to hotshot are documented in this file. The format is based 
 
 - Runbook: the Linux `cli.detection_unavailable` warning is now listed in `runbooks/injection-failure.md`, so operators who see it have a triage entry.
 - Linux: the screenshot filename is now reserved atomically before capture, so two captures in the same millisecond can no longer overwrite each other; the empty reservation is removed if the capture fails or is cancelled (#329).
+- Windows: the screenshot filename is now reserved atomically (`CreateNew`) before the PNG is saved, so two captures in the same millisecond can no longer overwrite each other; the empty reservation is removed if the save fails (#333).
 - macOS: a screenshot watch whose first `start()` could not open the folder (not yet creatable, privacy permission not yet granted, volume not mounted) is now retried by the 30 s reconcile timer instead of staying dead until auto-watch is toggled or the app relaunched; the same retry re-arms a watch lost to a failed folder rebind (#327).
 
 ## [0.2.0] - 2026-10-29

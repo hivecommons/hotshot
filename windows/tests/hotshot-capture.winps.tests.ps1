@@ -75,6 +75,8 @@ $r.resolveAbsolute = Resolve-HotshotDirectory -Dir 'C:\Shots\..\Other\'
 $ts = New-Object datetime 2026, 1, 2, 3, 4, 5, 678
 $r.shotFree = Get-HotshotShotPath -Dir 'C:\Shots' -Timestamp $ts -Exists { param($p) $false }
 $r.shotTaken = Get-HotshotShotPath -Dir 'C:\Shots' -Timestamp $ts -Exists { param($p) $p -notmatch '-2\.png$' }
+$rn = 0
+$r.shotReserve = Get-HotshotShotPath -Dir 'C:\Shots' -Timestamp $ts -Reserve { param($p) $script:rn++; $script:rn -gt 1 }
 
 $r.waitImage = Wait-HotshotClipboardImage -SequenceBefore 7 -Deadline (Get-Date).AddMinutes(5) `
     -GetSequence { 8 } -ContainsImage { $true } -GetImage { 'stub-image' } -Sleep { }
@@ -226,6 +228,7 @@ Describe 'Windows PowerShell 5.1 compatibility' -Skip:(-not $script:WinPS) {
         It 'names screenshots with the millisecond timestamp and -N suffix' {
             $script:Got.shotFree | Should -Be 'C:\Shots\hotshot-20260102-030405-678.png'
             $script:Got.shotTaken | Should -Be 'C:\Shots\hotshot-20260102-030405-678-2.png'
+            $script:Got.shotReserve | Should -Be 'C:\Shots\hotshot-20260102-030405-678-1.png'
         }
 
         It 'polls the clipboard through the injected collaborators' {

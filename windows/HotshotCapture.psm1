@@ -198,15 +198,34 @@ function Get-HotshotShotPath {
     param(
         [Parameter(Mandatory)] [string]$Dir,
         [datetime]$Timestamp = (Get-Date),
-        [scriptblock]$Exists = { param($p) Test-Path -LiteralPath $p }
+        [scriptblock]$Exists = { param($p) Test-Path -LiteralPath $p },
+        [scriptblock]$Reserve
     )
     # Millisecond timestamp plus a -N suffix when the name is already taken,
     # so two captures in the same instant never overwrite each other (parity
-    # with the macOS app and the Linux port).
+    # with the macOS app and the Linux port). The name is reserved atomically
+    # (CreateNew leaves an empty file), so a concurrent capture cannot pick
+    # the same name between the probe and the save.
+    if (-not $Reserve) {
+        if ($PSBoundParameters.ContainsKey('Exists')) {
+            $Reserve = { param($p) -not (& $Exists $p) }.GetNewClosure()
+        } else {
+            $Reserve = {
+                param($p)
+                try {
+                    [System.IO.File]::Open($p, [System.IO.FileMode]::CreateNew).Dispose()
+                    $true
+                } catch [System.IO.IOException] {
+                    # Only a name collision is retried; other IO errors surface.
+                    if (Test-Path -LiteralPath $p) { $false } else { throw }
+                }
+            }
+        }
+    }
     $base = "hotshot-{0:yyyyMMdd-HHmmss-fff}" -f $Timestamp
     $path = Join-Path $Dir "$base.png"
     $n = 1
-    while (& $Exists $path) {
+    while (-not (& $Reserve $path)) {
         $path = Join-Path $Dir "$base-$n.png"
         $n++
     }

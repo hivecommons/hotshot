@@ -54,7 +54,16 @@ if (-not $img) { Fail 'capture cancelled or timed out (no image appeared on the 
 $Dir = Resolve-HotshotDirectory -Dir $Dir
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 $shotPath = Get-HotshotShotPath -Dir $Dir
-$img.Save($shotPath, [System.Drawing.Imaging.ImageFormat]::Png)
+try {
+    $img.Save($shotPath, [System.Drawing.Imaging.ImageFormat]::Png)
+} catch {
+    $saveError = $_.Exception.Message
+    # Drop the empty reservation so a failed save leaves no stray file.
+    if ((Test-Path -LiteralPath $shotPath) -and ((Get-Item -LiteralPath $shotPath).Length -eq 0)) {
+        Remove-Item -LiteralPath $shotPath -Force -ErrorAction SilentlyContinue
+    }
+    Fail "could not save screenshot: $saveError"
+}
 
 $dataObj = New-HotshotClipboardDataObject -Image $img -ShotPath $shotPath
 Set-HotshotClipboardDataObject -DataObject $dataObj

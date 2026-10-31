@@ -474,6 +474,27 @@ Describe 'Get-HotshotShotPath' {
     }
 }
 
+Describe 'Get-HotshotShotPath atomic reservation' {
+    It 'moves to the -1 name when another process takes the candidate between probe and write' {
+        $tried = New-Object System.Collections.ArrayList
+        $path = Get-HotshotShotPath -Dir (Join-Path 'C:' 'Shots') -Timestamp ([datetime]'2026-03-04T05:06:07.123') `
+            -Reserve { param($p) [void]$tried.Add((Split-Path $p -Leaf)); $tried.Count -gt 1 }.GetNewClosure()
+        Split-Path $path -Leaf | Should -Be 'hotshot-20260304-050607-123-1.png'
+        $tried.Count | Should -Be 2
+    }
+
+    It 'reserves the file on disk so a second call for the same instant gets a different path' {
+        $dir = Join-Path $TestDrive 'reserved'
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $stamp = [datetime]'2026-03-04T05:06:07.123'
+        $first = Get-HotshotShotPath -Dir $dir -Timestamp $stamp
+        $second = Get-HotshotShotPath -Dir $dir -Timestamp $stamp
+        $second | Should -Not -Be $first
+        Test-Path -LiteralPath $first | Should -BeTrue
+        Test-Path -LiteralPath $second | Should -BeTrue
+    }
+}
+
 Describe 'New-HotshotClipboardDataObject' {
     BeforeAll {
         Add-Type -AssemblyName System.Windows.Forms

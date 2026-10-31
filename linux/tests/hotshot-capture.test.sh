@@ -211,6 +211,25 @@ assert_eq "unique_shot_path: an empty reservation pushes the next pick to -1" \
 assert_eq "unique_shot_path: the first reservation is untouched" \
     "$RACEDIR/hotshot-20260304-050607-124.png" "$raced_a"
 
+# A reservation that fails for any reason other than "name taken" (here: the
+# directory is not writable) must fail instead of looping on -N forever.
+RODIR="$TMP/readonly"
+mkdir -p "$RODIR"
+if [ "$(id -u)" -eq 0 ]; then
+    # root ignores mode bits, so skip rather than hang the suite
+    check "unique_shot_path: unwritable directory fails instead of looping (skipped as root)" 0
+    check "unique_shot_path: unwritable directory reserves nothing (skipped as root)" 0
+else
+    chmod 500 "$RODIR"
+    ro_out="$(timeout 5 bash -c "$(extract_fn unique_shot_path); unique_shot_path '$RODIR' 20260304-050607-125")"
+    rc=$?
+    assert_eq "unique_shot_path: unwritable directory fails instead of looping" "1" "$rc"
+    assert_eq "unique_shot_path: unwritable directory echoes no path" "" "$ro_out"
+    chmod 700 "$RODIR"
+    ok=1; [ -z "$(find "$RODIR" -name 'hotshot-*' 2>/dev/null)" ] && ok=0
+    check "unique_shot_path: unwritable directory reserves nothing" $ok
+fi
+
 # ==============================================================================
 # descendants / classify_cli against a real /proc tree
 # ==============================================================================
@@ -498,12 +517,40 @@ exit 1
 EOF
 chmod +x "$STUBS/failmaim"
 mv "$STUBS/maim" "$STUBS/maim.ok" && mv "$STUBS/failmaim" "$STUBS/maim"
-run_e2e "$plain_root" --full >/dev/null 2>&1
+mkdir -p "$TMP/failshots"
+run_e2e "$plain_root" --full --dir "$TMP/failshots" >/dev/null 2>&1
 rc=$?
 assert_eq "e2e capture failure: exit 1" "1" "$rc"
 ok=1; [ ! -e "$TYPELOG" ] && ok=0
 check "e2e capture failure: nothing typed" $ok
+# The name was reserved as an empty file before maim ran; the EXIT trap must
+# drop that reservation so a failed capture leaves no 0-byte PNG behind.
+ok=1; [ -z "$(find "$TMP/failshots" -name 'hotshot-*.png' 2>/dev/null)" ] && ok=0
+check "e2e capture failure: empty reservation removed from the shot dir" $ok
 mv "$STUBS/maim.ok" "$STUBS/maim"
+
+# Reservation failure (shot dir exists but is not writable) -> die before any
+# capture tool runs; the path itself stays redacted in the message.
+if [ "$(id -u)" -eq 0 ]; then
+    check "e2e unwritable dir: exit 1 (skipped as root)" 0
+    check "e2e unwritable dir: die message names the reservation, path redacted (skipped as root)" 0
+    check "e2e unwritable dir: nothing typed (skipped as root)" 0
+else
+    mkdir -p "$TMP/roshots"
+    chmod 500 "$TMP/roshots"
+    # timeout: a regression that keeps probing -N names would otherwise hang here
+    rm -f "$TYPELOG" "$CLIPLOG"
+    timeout 10 env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" DISPLAY=:99 PATH="$STUBS:/usr/bin:/bin" \
+        HOTSHOT_DIR="$TMP/shots" HOTSHOT_TEST_FOCUS_PID="$plain_root" \
+        bash "$SCRIPT" --full --dir "$TMP/roshots" >/dev/null 2>"$TMP/e2e-ro.err"
+    rc=$?
+    assert_eq "e2e unwritable dir: exit 1" "1" "$rc"
+    grep -q "cannot reserve a screenshot file in <redacted>" "$TMP/e2e-ro.err"
+    check "e2e unwritable dir: die message names the reservation, path redacted" $?
+    ok=1; [ ! -e "$TYPELOG" ] && ok=0
+    check "e2e unwritable dir: nothing typed" $ok
+    chmod 700 "$TMP/roshots"
+fi
 
 # X11 fallback: no maim on PATH -> scrot captures instead. The stub mimics
 # scrot >= 1.0: without -o/--overwrite it refuses to clobber an existing file
@@ -633,6 +680,8 @@ rc=$?
 assert_eq "e2e wayland cancelled slurp: exit 1" "1" "$rc"
 ok=1; [ ! -e "$TYPELOG" ] && ok=0
 check "e2e wayland cancelled slurp: nothing typed" $ok
+ok=1; [ -z "$(find "$TMP/wshots" -name 'hotshot-*.png' -empty 2>/dev/null)" ] && ok=0
+check "e2e wayland cancelled slurp: empty reservation removed" $ok
 mv "$WSTUBS/slurp.ok" "$WSTUBS/slurp"
 
 # No grim on PATH -> die with install hint.

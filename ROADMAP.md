@@ -7,11 +7,12 @@ the macOS app, Linux script, and Windows helper.
 ## Recently shipped
 
 - macOS, Linux, and Windows screenshot-to-terminal flows with CLI-aware text
-  injection for Claude Code, GitHub Copilot CLI, aider, and opencode.
+  injection for Claude Code, GitHub Copilot CLI, aider, opencode, and Gemini
+  CLI (its `@path` file-reference form, added in v0.2.0).
 - Clipboard enrichment with image data, file URLs, and shell-escaped text paths.
 - Isolated Linux and Windows tests (with external tools replaced by test doubles) plus extracted `HotshotCore` helpers for
   shared macOS decision logic.
-- First tagged release (v0.1.0) and a Homebrew install path via the
+- Tagged releases (v0.1.0, v0.2.0) and a Homebrew install path via the
   `hivecommons/homebrew-hive` tap (`brew install hivecommons/hive/hotshot`).
 
 ## Near term

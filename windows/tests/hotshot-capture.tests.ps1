@@ -493,6 +493,25 @@ Describe 'Get-HotshotShotPath atomic reservation' {
         Test-Path -LiteralPath $first | Should -BeTrue
         Test-Path -LiteralPath $second | Should -BeTrue
     }
+
+    It 'surfaces a non-collision IO error instead of retrying with -N suffixes' {
+        # Only a taken name is retried. A folder that vanished between the
+        # script's New-Item and the reservation must reach the caller's Fail
+        # path rather than loop forever over -1, -2, ... candidates.
+        $missing = Join-Path $TestDrive 'vanished\shots'
+        Test-Path -LiteralPath $missing | Should -BeFalse
+
+        $err = $null
+        try {
+            Get-HotshotShotPath -Dir $missing -Timestamp ([datetime]'2026-03-04T05:06:07.123')
+        } catch {
+            $err = $_
+        }
+
+        $err | Should -Not -BeNullOrEmpty
+        $err.Exception.GetBaseException() | Should -BeOfType System.IO.DirectoryNotFoundException
+        Test-Path -LiteralPath (Join-Path $TestDrive 'vanished') | Should -BeFalse
+    }
 }
 
 Describe 'New-HotshotClipboardDataObject' {

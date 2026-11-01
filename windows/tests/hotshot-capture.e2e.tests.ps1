@@ -21,6 +21,8 @@ BeforeAll {
     #   HOTSHOT_TEST_IMAGE  '1' -> the clipboard wait returns a fake image whose
     #                             Save() writes a marker file; unset -> $null
     #   HOTSHOT_TEST_CLI    value Get-TargetCli returns
+    #   HOTSHOT_TEST_RESERVE_FAIL '1' -> Get-HotshotShotPath throws the
+    #                             non-collision error of a read-only folder
     $script:StubModule = @'
 function Write-StubCall {
     param([string]$Function, [hashtable]$Arguments)
@@ -52,7 +54,21 @@ function Resolve-HotshotDirectory {
 function Get-HotshotShotPath {
     param([string]$Dir)
     Write-StubCall 'Get-HotshotShotPath' @{ Dir = $Dir }
+    if ($env:HOTSHOT_TEST_RESERVE_FAIL -eq '1') {
+        # Same shape as the real [System.IO.File]::Open(CreateNew) failure on
+        # a read-only folder: PowerShell wraps the .NET exception in a
+        # MethodInvocationException, and both messages carry the full path.
+        $denied = [System.UnauthorizedAccessException]::new("Access to the path '$(Join-Path $Dir 'hotshot-stub.png')' is denied.")
+        throw [System.Management.Automation.MethodInvocationException]::new(
+            "Exception calling `"Open`" with `"2`" argument(s): `"$($denied.Message)`"", $denied)
+    }
     return (Join-Path $Dir 'hotshot-stub.png')
+}
+
+function Get-RedactedPath {
+    param([string]$Path)
+    if ($env:HOTSHOT_VERBOSE_LOGGING -eq '1') { return $Path }
+    return '<redacted>'
 }
 
 function New-HotshotClipboardDataObject {
@@ -89,7 +105,7 @@ function Invoke-HotshotInjection {
 }
 
 Export-ModuleMember -Function Wait-HotshotClipboardImage, Resolve-HotshotDirectory, Get-HotshotShotPath, `
-    New-HotshotClipboardDataObject, Set-HotshotClipboardDataObject, Get-TargetCli, `
+    Get-RedactedPath, New-HotshotClipboardDataObject, Set-HotshotClipboardDataObject, Get-TargetCli, `
     Get-HotshotTypedText, Invoke-HotshotInjection
 '@
 
@@ -106,8 +122,9 @@ function Start-Process {
     # Runs the installed copy of the script in a child pwsh. $Arguments is
     # spliced verbatim into the command line after the script path.
     function Invoke-CaptureScript {
-        param([string]$Arguments = '', [switch]$WithImage, [string]$Cli = 'unknown')
+        param([string]$Arguments = '', [switch]$WithImage, [string]$Cli = 'unknown', [switch]$ReserveFails)
         if ($WithImage) { $env:HOTSHOT_TEST_IMAGE = '1' } else { Remove-Item Env:HOTSHOT_TEST_IMAGE -ErrorAction SilentlyContinue }
+        if ($ReserveFails) { $env:HOTSHOT_TEST_RESERVE_FAIL = '1' } else { Remove-Item Env:HOTSHOT_TEST_RESERVE_FAIL -ErrorAction SilentlyContinue }
         $env:HOTSHOT_TEST_CLI = $Cli
         $command = $script:StartProcessShim + "`n& `$env:HOTSHOT_TEST_SCRIPT $Arguments"
         $stdout = & pwsh -NoProfile -ExecutionPolicy Bypass -Command $command 2>$script:StderrFile
@@ -142,11 +159,15 @@ Describe 'hotshot-capture.ps1' {
         $script:ExpectedShot = Join-Path $script:ShotDir 'hotshot-stub.png'
         $script:OrigHotshotDir = $env:HOTSHOT_DIR
         Remove-Item Env:HOTSHOT_DIR -ErrorAction SilentlyContinue
+        $script:OrigVerboseLogging = $env:HOTSHOT_VERBOSE_LOGGING
+        Remove-Item Env:HOTSHOT_VERBOSE_LOGGING -ErrorAction SilentlyContinue
     }
 
     AfterEach {
         if ($null -ne $script:OrigHotshotDir) { $env:HOTSHOT_DIR = $script:OrigHotshotDir } else { Remove-Item Env:HOTSHOT_DIR -ErrorAction SilentlyContinue }
-        Remove-Item Env:HOTSHOT_TEST_SCRIPT, Env:HOTSHOT_TEST_LOG, Env:HOTSHOT_TEST_IMAGE, Env:HOTSHOT_TEST_CLI -ErrorAction SilentlyContinue
+        if ($null -ne $script:OrigVerboseLogging) { $env:HOTSHOT_VERBOSE_LOGGING = $script:OrigVerboseLogging } else { Remove-Item Env:HOTSHOT_VERBOSE_LOGGING -ErrorAction SilentlyContinue }
+        Remove-Item Env:HOTSHOT_TEST_SCRIPT, Env:HOTSHOT_TEST_LOG, Env:HOTSHOT_TEST_IMAGE, Env:HOTSHOT_TEST_CLI, `
+            Env:HOTSHOT_TEST_RESERVE_FAIL -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $script:TempRoot
     }
 
@@ -282,6 +303,43 @@ Describe 'hotshot-capture.ps1' {
             Test-Path $script:ShotDir | Should -BeFalse
             (Read-StubCallLog | ForEach-Object { $_.fn }) | Should -Be @('Start-Process', 'Wait-HotshotClipboardImage')
         }
+    }
+
+    # Parity with linux/hotshot-capture.sh `die "cannot reserve ..."` (#335):
+    # a non-collision reservation error (read-only folder) must exit through
+    # Fail, not as a raw terminating error that prints the full path.
+    Context 'screenshot file cannot be reserved' {
+        BeforeEach {
+            $script:Result = Invoke-CaptureScript -Arguments "-Dir `"$script:ShotDir`"" -WithImage -ReserveFails
+        }
+
+        It 'exits 1 with a hotshot-prefixed error naming the failure type' {
+            $script:Result.ExitCode | Should -Be 1
+            $script:Result.Stderr | Should -Match 'hotshot: cannot reserve a screenshot file in <redacted> \(UnauthorizedAccessException\)'
+            $script:Result.Stdout | Should -BeNullOrEmpty
+        }
+
+        It 'does not leak the screenshot folder path into the error' {
+            $script:Result.Stderr | Should -Not -Match ([regex]::Escape($script:ShotDir))
+        }
+
+        It 'stops before saving, touching the clipboard or typing' {
+            (Read-StubCallLog | ForEach-Object { $_.fn }) |
+                Should -Be @('Start-Process', 'Wait-HotshotClipboardImage', 'Get-HotshotShotPath')
+        }
+    }
+
+    It 'shows the folder in the reservation error when HOTSHOT_VERBOSE_LOGGING=1' {
+        $env:HOTSHOT_VERBOSE_LOGGING = '1'
+        $result = Invoke-CaptureScript -Arguments "-Dir `"$script:ShotDir`"" -WithImage -ReserveFails
+        $result.ExitCode | Should -Be 1
+        # The redirected ConciseView error wraps the long temp path onto
+        # continuation lines prefixed with a '| ' gutter (the break can land
+        # right after "in"), so unwrap once and assert on the joined message.
+        $unwrapped = $result.Stderr -replace '\r?\n\s*(\|\s?)?', ''
+        $unwrapped | Should -Match 'hotshot: cannot reserve a screenshot file in\s*'
+        $unwrapped | Should -Match ([regex]::Escape($script:ShotDir))
+        $unwrapped | Should -Not -Match 'cannot reserve a screenshot file in\s*<redacted>'
     }
 
     It 'fails before launching the overlay when HotshotCapture.psm1 is not next to the script (#119)' {

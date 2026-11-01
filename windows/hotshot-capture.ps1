@@ -53,7 +53,17 @@ if (-not $img) { Fail 'capture cancelled or timed out (no image appeared on the 
 # --- 2. save PNG + multi-format clipboard -------------------------------------
 $Dir = Resolve-HotshotDirectory -Dir $Dir
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
-$shotPath = Get-HotshotShotPath -Dir $Dir
+try {
+    $shotPath = Get-HotshotShotPath -Dir $Dir
+} catch {
+    # Non-collision reservation errors (read-only folder, ACL) are rethrown
+    # by Get-HotshotShotPath; report them like the Linux port's
+    # "cannot reserve" die. The .NET message embeds the full path, so only
+    # the exception type is shown and the folder is redacted (#77).
+    # GetBaseException() unwraps the MethodInvocationException PowerShell
+    # puts around the [System.IO.File]::Open failure.
+    Fail "cannot reserve a screenshot file in $(Get-RedactedPath -Path $Dir) ($($_.Exception.GetBaseException().GetType().Name))"
+}
 try {
     $img.Save($shotPath, [System.Drawing.Imaging.ImageFormat]::Png)
 } catch {

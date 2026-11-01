@@ -67,12 +67,18 @@ try {
 try {
     $img.Save($shotPath, [System.Drawing.Imaging.ImageFormat]::Png)
 } catch {
-    $saveError = $_.Exception.Message
+    $saveError = $_.Exception.GetBaseException()
     # Drop the empty reservation so a failed save leaves no stray file.
     if ((Test-Path -LiteralPath $shotPath) -and ((Get-Item -LiteralPath $shotPath).Length -eq 0)) {
         Remove-Item -LiteralPath $shotPath -Force -ErrorAction SilentlyContinue
     }
-    Fail "could not save screenshot: $saveError"
+    # Like the reservation error above: the .NET save message can embed the
+    # directory and filename (System.Drawing.Common's DirectoryNotFound
+    # check names both), so only the exception type is shown and the folder
+    # is redacted (#77). The full message is kept for HOTSHOT_VERBOSE_LOGGING=1.
+    $detail = $saveError.GetType().Name
+    if (Get-HotshotVerboseLogging) { $detail = "${detail}: $($saveError.Message)" }
+    Fail "could not save screenshot in $(Get-RedactedPath -Path $Dir) ($detail)"
 }
 
 $dataObj = New-HotshotClipboardDataObject -Image $img -ShotPath $shotPath

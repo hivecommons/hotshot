@@ -23,6 +23,9 @@ BeforeAll {
     #   HOTSHOT_TEST_CLI    value Get-TargetCli returns
     #   HOTSHOT_TEST_RESERVE_FAIL '1' -> Get-HotshotShotPath throws the
     #                             non-collision error of a read-only folder
+    #   HOTSHOT_TEST_SAVE_FAIL '1' -> the fake image's Save() leaves an empty
+    #                             reservation and throws the path-bearing
+    #                             DirectoryNotFoundException of a vanished folder
     $script:StubModule = @'
 function Write-StubCall {
     param([string]$Function, [hashtable]$Arguments)
@@ -40,8 +43,17 @@ function Wait-HotshotClipboardImage {
     $img = [pscustomobject]@{ Kind = 'stub-image' }
     $img | Add-Member -MemberType ScriptMethod -Name Save -Value {
         param($Path, $Format)
-        Set-Content -Path $Path -Value 'stub-png'
         Write-StubCall 'Image.Save' @{ Path = $Path; Format = "$Format" }
+        if ($env:HOTSHOT_TEST_SAVE_FAIL -eq '1') {
+            # Same shape as System.Drawing.Common's Image.Save on a folder
+            # removed after the reservation: the empty reserved file exists,
+            # and the .NET message names both the directory and the file.
+            New-Item -ItemType File -Force -Path $Path | Out-Null
+            $missing = [System.IO.DirectoryNotFoundException]::new("The directory $(Split-Path -Parent $Path) of the filename $Path does not exist.")
+            throw [System.Management.Automation.MethodInvocationException]::new(
+                "Exception calling `"Save`" with `"2`" argument(s): `"$($missing.Message)`"", $missing)
+        }
+        Set-Content -Path $Path -Value 'stub-png'
     }
     return $img
 }
@@ -65,9 +77,13 @@ function Get-HotshotShotPath {
     return (Join-Path $Dir 'hotshot-stub.png')
 }
 
+function Get-HotshotVerboseLogging {
+    return $env:HOTSHOT_VERBOSE_LOGGING -eq '1'
+}
+
 function Get-RedactedPath {
     param([string]$Path)
-    if ($env:HOTSHOT_VERBOSE_LOGGING -eq '1') { return $Path }
+    if (Get-HotshotVerboseLogging) { return $Path }
     return '<redacted>'
 }
 
@@ -105,7 +121,7 @@ function Invoke-HotshotInjection {
 }
 
 Export-ModuleMember -Function Wait-HotshotClipboardImage, Resolve-HotshotDirectory, Get-HotshotShotPath, `
-    Get-RedactedPath, New-HotshotClipboardDataObject, Set-HotshotClipboardDataObject, Get-TargetCli, `
+    Get-HotshotVerboseLogging, Get-RedactedPath, New-HotshotClipboardDataObject, Set-HotshotClipboardDataObject, Get-TargetCli, `
     Get-HotshotTypedText, Invoke-HotshotInjection
 '@
 
@@ -122,9 +138,10 @@ function Start-Process {
     # Runs the installed copy of the script in a child pwsh. $Arguments is
     # spliced verbatim into the command line after the script path.
     function Invoke-CaptureScript {
-        param([string]$Arguments = '', [switch]$WithImage, [string]$Cli = 'unknown', [switch]$ReserveFails)
+        param([string]$Arguments = '', [switch]$WithImage, [string]$Cli = 'unknown', [switch]$ReserveFails, [switch]$SaveFails)
         if ($WithImage) { $env:HOTSHOT_TEST_IMAGE = '1' } else { Remove-Item Env:HOTSHOT_TEST_IMAGE -ErrorAction SilentlyContinue }
         if ($ReserveFails) { $env:HOTSHOT_TEST_RESERVE_FAIL = '1' } else { Remove-Item Env:HOTSHOT_TEST_RESERVE_FAIL -ErrorAction SilentlyContinue }
+        if ($SaveFails) { $env:HOTSHOT_TEST_SAVE_FAIL = '1' } else { Remove-Item Env:HOTSHOT_TEST_SAVE_FAIL -ErrorAction SilentlyContinue }
         $env:HOTSHOT_TEST_CLI = $Cli
         $command = $script:StartProcessShim + "`n& `$env:HOTSHOT_TEST_SCRIPT $Arguments"
         $stdout = & pwsh -NoProfile -ExecutionPolicy Bypass -Command $command 2>$script:StderrFile
@@ -167,7 +184,7 @@ Describe 'hotshot-capture.ps1' {
         if ($null -ne $script:OrigHotshotDir) { $env:HOTSHOT_DIR = $script:OrigHotshotDir } else { Remove-Item Env:HOTSHOT_DIR -ErrorAction SilentlyContinue }
         if ($null -ne $script:OrigVerboseLogging) { $env:HOTSHOT_VERBOSE_LOGGING = $script:OrigVerboseLogging } else { Remove-Item Env:HOTSHOT_VERBOSE_LOGGING -ErrorAction SilentlyContinue }
         Remove-Item Env:HOTSHOT_TEST_SCRIPT, Env:HOTSHOT_TEST_LOG, Env:HOTSHOT_TEST_IMAGE, Env:HOTSHOT_TEST_CLI, `
-            Env:HOTSHOT_TEST_RESERVE_FAIL -ErrorAction SilentlyContinue
+            Env:HOTSHOT_TEST_RESERVE_FAIL, Env:HOTSHOT_TEST_SAVE_FAIL -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $script:TempRoot
     }
 
@@ -340,6 +357,43 @@ Describe 'hotshot-capture.ps1' {
         $unwrapped | Should -Match 'hotshot: cannot reserve a screenshot file in\s*'
         $unwrapped | Should -Match ([regex]::Escape($script:ShotDir))
         $unwrapped | Should -Not -Match 'cannot reserve a screenshot file in\s*<redacted>'
+    }
+
+    # The save error must go through the same redaction as the reservation
+    # error: System.Drawing.Common's Image.Save names the directory and the
+    # file when the folder vanished between reservation and save.
+    Context 'screenshot file cannot be saved' {
+        BeforeEach {
+            $script:Result = Invoke-CaptureScript -Arguments "-Dir `"$script:ShotDir`"" -WithImage -SaveFails
+        }
+
+        It 'exits 1 with a hotshot-prefixed error naming the failure type' {
+            $script:Result.ExitCode | Should -Be 1
+            $script:Result.Stderr | Should -Match 'hotshot: could not save screenshot in <redacted> \(DirectoryNotFoundException\)'
+            $script:Result.Stdout | Should -BeNullOrEmpty
+        }
+
+        It 'does not leak the screenshot folder path or the .NET message into the error' {
+            $script:Result.Stderr | Should -Not -Match ([regex]::Escape($script:ShotDir))
+            $script:Result.Stderr | Should -Not -Match 'does not exist'
+        }
+
+        It 'removes the empty reservation and stops before the clipboard or typing' {
+            Test-Path -LiteralPath $script:ExpectedShot | Should -BeFalse
+            (Read-StubCallLog | ForEach-Object { $_.fn }) |
+                Should -Be @('Start-Process', 'Wait-HotshotClipboardImage', 'Get-HotshotShotPath', 'Image.Save')
+        }
+    }
+
+    It 'shows the folder and the .NET message in the save error when HOTSHOT_VERBOSE_LOGGING=1' {
+        $env:HOTSHOT_VERBOSE_LOGGING = '1'
+        $result = Invoke-CaptureScript -Arguments "-Dir `"$script:ShotDir`"" -WithImage -SaveFails
+        $result.ExitCode | Should -Be 1
+        $unwrapped = $result.Stderr -replace '\r?\n\s*(\|\s?)?', ''
+        $unwrapped | Should -Match 'hotshot: could not save screenshot in\s*'
+        $unwrapped | Should -Match ([regex]::Escape($script:ShotDir))
+        $unwrapped | Should -Match 'DirectoryNotFoundException:.*does not exist'
+        $unwrapped | Should -Not -Match '<redacted>'
     }
 
     It 'fails before launching the overlay when HotshotCapture.psm1 is not next to the script (#119)' {

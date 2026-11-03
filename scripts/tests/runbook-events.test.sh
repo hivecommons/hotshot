@@ -77,7 +77,7 @@ fixture all-emitted
 cat >"$RB/a.md" <<'EOF'
 | `app.launched` (info) | started | — |
 | `injection.ydotool_failed` (warn, Linux) | ydotool failed | — |
-See `injection.sendkeys_failed` (Windows) and the domain `io-hivecommons.hotshot`.
+See version `v0.1.0` and the domain `io.hivecommons.hotshot` and `injection.sendkeys_failed` (Windows).
 EOF
 cat >"$SRC/Sources/Diagnostics.swift" <<'EOF'
     case appLaunched = "app.launched"
@@ -95,7 +95,8 @@ assert_eq "all emitted: exit 0" 0 "$rc"
 assert_contains "all emitted: swift literal accepted" "ok      app.launched" "$out"
 assert_contains "all emitted: bash log_event argument accepted" "ok      injection.ydotool_failed" "$out"
 assert_contains "all emitted: single-quoted PowerShell literal accepted" "ok      injection.sendkeys_failed" "$out"
-assert_not_contains "all emitted: dotted domain with hyphens is not treated as an event" "io-hivecommons" "$out"
+assert_not_contains "all emitted: version string v0.1.0 is not treated as an event" "v0.1.0" "$out"
+assert_not_contains "all emitted: dotted domain is not treated as an event" "io.hivecommons" "$out"
 assert_eq "all emitted: exactly three events reported" 3 "$(grep -c '^ok ' <<<"$out")"
 
 # ==============================================================================
@@ -218,10 +219,10 @@ assert_eq "three-segment: exactly two events reported" 2 "$(grep -c '^ok ' <<<"$
 fixture three-segment-missing
 cat >"$RB/a.md" <<'EOF'
 | `injection.iterm2` | iTerm2 injection attempt | — |
+| `injection.iterm2.script` (verbose-only) | AppleScript source | — |
 EOF
 cat >"$SRC/Sources/Injector.swift" <<'EOF'
     case injectionIterm2 = "injection.iterm2"
-    case injectionIterm2Script = "injection.iterm2.script"
 EOF
 
 out="$(run_guard "$RB" "$SRC")"

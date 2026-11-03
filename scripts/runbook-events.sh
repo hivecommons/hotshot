@@ -26,12 +26,13 @@ else
     SOURCE_DIRS=("$ROOT/Sources" "$ROOT/linux" "$ROOT/windows")
 fi
 
-# Event names are `<category>.<event>...` in lowercase snake_case; segments
-# may contain digits (e.g. `iterm2`) and names may have more than two segments
-# (e.g. `injection.iterm2.script`). Other backticked dotted tokens in the
-# runbooks (domains, file names) contain characters outside that alphabet and
-# are skipped.
-events="$(grep -ohE '`[a-z0-9_]+(\.[a-z0-9_]+)+`' "$RUNBOOK_DIR"/*.md 2>/dev/null | tr -d '`' | sort -u)"
+# Event names are `<category>.<event>...` in lowercase snake_case; each segment
+# starts with a letter and may contain digits and underscores
+# (e.g. `iterm2`, `injection.iterm2.script`). Version strings like `v0.1.0` are
+# skipped because segments starting with digits are excluded. Other backticked
+# dotted tokens in the runbooks (domains, file names) contain characters outside
+# that alphabet and are skipped.
+events="$(grep -ohE '`[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+`' "$RUNBOOK_DIR"/*.md 2>/dev/null | tr -d '`' | sort -u)"
 
 if [ -z "$events" ]; then
     echo "FAIL: no event names found in $RUNBOOK_DIR/*.md" >&2
@@ -43,10 +44,10 @@ fi
 # directories are excluded so a fixture naming an event does not count as
 # the binary emitting it.
 quoted_literals() {
-    grep -rhoE "[\"'][a-z0-9_]+(\.[a-z0-9_]+)+[\"']" "$@" --include='*.swift' --include='*.ps1' --include='*.psm1' --exclude-dir=Tests --exclude-dir=tests 2>/dev/null | tr -d "\"'"
+    grep -rhoE "[\"'][a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+[\"']" "$@" --include='*.swift' --include='*.ps1' --include='*.psm1' --exclude-dir=Tests --exclude-dir=tests 2>/dev/null | tr -d "\"'"
 }
 bash_log_events() {
-    grep -rhoE 'log_event +[A-Z]+ +[a-z0-9_]+(\.[a-z0-9_]+)+' "$@" --include='*.sh' --exclude-dir=Tests --exclude-dir=tests 2>/dev/null | awk '{print $3}'
+    grep -rhoE 'log_event +[A-Z]+ +[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+'  "$@" --include='*.sh' --exclude-dir=Tests --exclude-dir=tests 2>/dev/null | awk '{print $3}'
 }
 emitted="$({ quoted_literals "${SOURCE_DIRS[@]}"; bash_log_events "${SOURCE_DIRS[@]}"; } | sort -u)"
 

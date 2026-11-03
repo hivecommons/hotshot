@@ -77,7 +77,7 @@ fixture all-emitted
 cat >"$RB/a.md" <<'EOF'
 | `app.launched` (info) | started | — |
 | `injection.ydotool_failed` (warn, Linux) | ydotool failed | — |
-See `injection.sendkeys_failed` (Windows) and the domain `io.hivecommons.hotshot`.
+See version `v0.1.0` and the domain `io.hivecommons.hotshot` and `injection.sendkeys_failed` (Windows).
 EOF
 cat >"$SRC/Sources/Diagnostics.swift" <<'EOF'
     case appLaunched = "app.launched"
@@ -95,6 +95,7 @@ assert_eq "all emitted: exit 0" 0 "$rc"
 assert_contains "all emitted: swift literal accepted" "ok      app.launched" "$out"
 assert_contains "all emitted: bash log_event argument accepted" "ok      injection.ydotool_failed" "$out"
 assert_contains "all emitted: single-quoted PowerShell literal accepted" "ok      injection.sendkeys_failed" "$out"
+assert_not_contains "all emitted: version string v0.1.0 is not treated as an event" "v0.1.0" "$out"
 assert_not_contains "all emitted: dotted domain is not treated as an event" "io.hivecommons" "$out"
 assert_eq "all emitted: exactly three events reported" 3 "$(grep -c '^ok ' <<<"$out")"
 
@@ -190,7 +191,49 @@ assert_eq "repo: runbooks name only emitted events (exit 0)" 0 "$rc"
 if [ "$rc" -ne 0 ]; then
     grep '^MISSING' <<<"$out" | sed 's/^/    /'
 fi
-check "repo: at least one event found in runbooks" "$([ "$(grep -c '^ok ' <<<"$out")" -gt 0 ]; echo $?)"
+if [ "$(grep -c '^ok ' <<<"$out")" -gt 0 ]; then
+    check "repo: at least one event found in runbooks" 0
+else
+    check "repo: at least one event found in runbooks" 1
+fi
+
+# ==============================================================================
+# 8. Three-segment event names (e.g. injection.iterm2.script) are recognized
+
+fixture three-segment
+cat >"$RB/a.md" <<'EOF'
+| `injection.iterm2` | iTerm2 injection attempt | — |
+| `injection.iterm2.script` (verbose-only) | AppleScript source | — |
+EOF
+cat >"$SRC/Sources/Injector.swift" <<'EOF'
+    case injectionIterm2 = "injection.iterm2"
+    case injectionIterm2Script = "injection.iterm2.script"
+EOF
+
+out="$(run_guard "$RB" "$SRC")"
+rc=$?
+assert_eq "three-segment: exit 0" 0 "$rc"
+assert_contains "three-segment: three-segment name accepted" "ok      injection.iterm2" "$out"
+assert_contains "three-segment: verbose-only three-segment name accepted" "ok      injection.iterm2.script" "$out"
+assert_eq "three-segment: exactly two events reported" 2 "$(grep -c '^ok ' <<<"$out")"
+
+# ==============================================================================
+# 9. Three-segment event name missing from runbook fails the check
+
+fixture three-segment-missing
+cat >"$RB/a.md" <<'EOF'
+| `injection.iterm2` | iTerm2 injection attempt | — |
+| `injection.iterm2.script` (verbose-only) | AppleScript source | — |
+EOF
+cat >"$SRC/Sources/Injector.swift" <<'EOF'
+    case injectionIterm2 = "injection.iterm2"
+EOF
+
+out="$(run_guard "$RB" "$SRC")"
+rc=$?
+assert_eq "three-segment-missing: exit 1" 1 "$rc"
+assert_contains "three-segment-missing: reported MISSING" "MISSING injection.iterm2.script" "$out"
+assert_contains "three-segment-missing: still reports the emitted one" "ok      injection.iterm2" "$out"
 
 # ==============================================================================
 echo

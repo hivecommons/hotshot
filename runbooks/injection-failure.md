@@ -57,6 +57,8 @@ These info-level events show how far capture and injection progressed; they do n
 | `watcher.new_files` | A debounced folder check found new screenshot filenames, before quarantine and age filtering. | Normal logs show a count; verbose logs add filenames. A nonzero count does not guarantee an injectable screenshot; check for skipped-file warnings. |
 | `terminal.cli_detected` | Path injection resolved the target CLI and its path format. | Check the logged CLI when the typed format is unexpected; a preceding tty warning means detection fell back to the bracketed default. |
 | `injection.ctrl_v` | A Ctrl-V injection attempt is about to run against the tracked terminal. | Confirms paste was attempted, not completed; check for a following focus-loss warning or AppleScript error. |
+| `injection.iterm2` | An iTerm2 injection via its own AppleScript is about to run against the tracked session. | Confirms iTerm2 attempt, not completion; detail is the typed path; check for a following `applescript.error`. |
+| `injection.iterm2.script` (verbose-only) | The AppleScript source that was run for iTerm2 injection. | Use to see exactly what was sent when the typed text looks wrong. |
 | `applescript.result` (verbose-only) | An AppleScript completed successfully; the detail is its string result, or `(none)`. | Can come from injection, focus or notification scripts. Correlate with nearby events and verify terminal contents rather than treating it alone as proof of delivery. |
 
 ## 3. Verify recovery

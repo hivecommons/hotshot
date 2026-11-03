@@ -6,6 +6,8 @@ All notable changes to hotshot are documented in this file. The format is based 
 
 ### Fixed
 
+- Runbooks: `runbooks/injection-failure.md` now documents the `injection.iterm2` and `injection.iterm2.script` diagnostic events emitted by iTerm2 injection on macOS, so operators triaging iTerm2 captures have event entries in the runbook.
+- Guard: `scripts/runbook-events.sh` now recognises event names with digits (e.g. `iterm2`) and more than two segments (e.g. `injection.iterm2.script`) so the runbook/source guard can validate them, matching the documented events in the runbooks.
 - Runbook: the Linux `cli.detection_unavailable` warning is now listed in `runbooks/injection-failure.md`, so operators who see it have a triage entry.
 - Linux: the screenshot filename is now reserved atomically before capture, so two captures in the same millisecond can no longer overwrite each other; the empty reservation is removed if the capture fails or is cancelled (#329).
 - Windows: the screenshot filename is now reserved atomically (`CreateNew`) before the PNG is saved, so two captures in the same millisecond can no longer overwrite each other; the empty reservation is removed if the save fails (#333).

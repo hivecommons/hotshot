@@ -236,6 +236,51 @@ assert_contains "three-segment-missing: reported MISSING" "MISSING injection.ite
 assert_contains "three-segment-missing: still reports the emitted one" "ok      injection.iterm2" "$out"
 
 # ==============================================================================
+# 10. Digits and extra segments are accepted on the bash log_event and
+#     PowerShell literal paths too, not only Swift literals
+
+fixture widened-emitters
+cat >"$RB/a.md" <<'EOF'
+| `clipboard.wl_copy2.retry` (warn, Linux) | wl-copy retried | — |
+| `injection.sendkeys.v2_failed` (warn, Windows) | SendKeys v2 failed | — |
+EOF
+cat >"$SRC/linux/capture.sh" <<'EOF'
+log_event WARN clipboard.wl_copy2.retry "retrying wl-copy"
+EOF
+cat >"$SRC/windows/Capture.psm1" <<'EOF'
+Format-HotshotDiagnostic -Severity WARN -Event 'injection.sendkeys.v2_failed' -Detail "$_"
+EOF
+
+out="$(run_guard "$RB" "$SRC")"
+rc=$?
+assert_eq "widened emitters: exit 0" 0 "$rc"
+assert_contains "widened emitters: bash log_event three-segment name with digit accepted" "ok      clipboard.wl_copy2.retry" "$out"
+assert_contains "widened emitters: PowerShell three-segment name with digit accepted" "ok      injection.sendkeys.v2_failed" "$out"
+assert_eq "widened emitters: exactly two events reported" 2 "$(grep -c '^ok ' <<<"$out")"
+
+# ==============================================================================
+# 11. Reverse-DNS identifiers under every skipped TLD are ignored on the
+#     runbook side even when no source literal happens to spell them out
+
+fixture reverse-dns
+cat >"$RB/a.md" <<'EOF'
+| `app.launched` (info) | started | — |
+Files carrying `com.apple.quarantine` are skipped; see `org.freedesktop.portal.desktop`,
+`net.example.tool`, `io.hivecommons.hotshot` and `dev.example.helper`.
+EOF
+cat >"$SRC/Sources/Diagnostics.swift" <<'EOF'
+    case appLaunched = "app.launched"
+EOF
+
+out="$(run_guard "$RB" "$SRC")"
+rc=$?
+assert_eq "reverse-dns: exit 0" 0 "$rc"
+for tld in com org net io dev; do
+    assert_not_contains "reverse-dns: ${tld}.* token is not treated as an event" "MISSING ${tld}." "$out"
+done
+assert_eq "reverse-dns: exactly one event reported" 1 "$(grep -c '^ok ' <<<"$out")"
+
+# ==============================================================================
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

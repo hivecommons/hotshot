@@ -191,7 +191,11 @@ assert_eq "repo: runbooks name only emitted events (exit 0)" 0 "$rc"
 if [ "$rc" -ne 0 ]; then
     grep '^MISSING' <<<"$out" | sed 's/^/    /'
 fi
-check "repo: at least one event found in runbooks" "$([ "$(grep -c '^ok ' <<<"$out")" -gt 0 ]; echo $?)"
+if [ "$(grep -c '^ok ' <<<"$out")" -gt 0 ]; then
+    check "repo: at least one event found in runbooks" 0
+else
+    check "repo: at least one event found in runbooks" 1
+fi
 
 # ==============================================================================
 # 8. Three-segment event names (e.g. injection.iterm2.script) are recognized

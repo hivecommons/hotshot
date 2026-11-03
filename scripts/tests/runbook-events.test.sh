@@ -281,6 +281,41 @@ done
 assert_eq "reverse-dns: exactly one event reported" 1 "$(grep -c '^ok ' <<<"$out")"
 
 # ==============================================================================
+# 12. Reverse-DNS identifiers under TLDs beyond the original five are ignored
+
+fixture reverse-dns-extra
+cat >"$RB/a.md" <<'EOF'
+| `app.launched` (info) | started | — |
+Identifiers such as `co.example.identifier` and `uk.example.tool` are not events.
+EOF
+cat >"$SRC/Sources/Diagnostics.swift" <<'EOF'
+    case appLaunched = "app.launched"
+EOF
+
+out="$(run_guard "$RB" "$SRC")"
+rc=$?
+assert_eq "reverse-dns-extra: exit 0" 0 "$rc"
+assert_not_contains "reverse-dns-extra: co.* token is not treated as an event" "co.example" "$out"
+assert_not_contains "reverse-dns-extra: uk.* token is not treated as an event" "uk.example" "$out"
+
+# ==============================================================================
+# 13. An excluded TLD that is also an emitted event category fails loudly
+
+fixture tld-collision
+cat >"$RB/a.md" <<'EOF'
+`dev.started` and `app.launched` are logged.
+EOF
+cat >"$SRC/Sources/Diagnostics.swift" <<'EOF'
+    case devStarted = "dev.started"
+    case appLaunched = "app.launched"
+EOF
+
+out="$(run_guard "$RB" "$SRC")"
+rc=$?
+assert_eq "tld-collision: exit 1" 1 "$rc"
+assert_contains "tld-collision: names the colliding prefix" "'dev.started' is emitted" "$out"
+
+# ==============================================================================
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

@@ -50,6 +50,9 @@ jobs:
           # figure CI last measured on main (HotshotCore 100%, HotshotApp
           # 98.9% at #302); raise them again when a PR lifts coverage.
           floors = {"HotshotCore": 99, "HotshotApp": 98}
+          # A floor more than this many points under measured coverage has
+          # lagged a lift; raise it in the PR that lifted it.
+          MAX_SLACK = 5
 
           data = json.load(open("coverage.json"))["data"][0]
           totals = {}
@@ -71,6 +74,9 @@ jobs:
               print(f"{mod}: {pct}% ({c}/{n} lines)" + label)
               if floor is not None and pct < floor:
                   print(f"::error::{mod} line coverage {pct}% is below the {floor}% floor")
+                  failed = True
+              elif floor is not None and pct - floor > MAX_SLACK:
+                  print(f"::error::{mod} floor {floor}% lags measured {pct}% by more than {MAX_SLACK} points; raise the floor in this PR")
                   failed = True
           for mod in floors:
               if mod not in totals:
@@ -191,10 +197,23 @@ jobs:
           $cfg.CodeCoverage.Enabled = $true
           $cfg.CodeCoverage.Path = @('windows/HotshotCapture.psm1')
           $cfg.CodeCoverage.OutputPath = 'coverage-pester.xml'
-          # Floor sits a few points under the figure CI measures on main;
-          # raise it when a PR lifts coverage (same policy as the Swift floors).
-          $cfg.CodeCoverage.CoveragePercentTarget = 88
-          Invoke-Pester -Configuration $cfg
+          # Floor sits a few points under the figure CI measures on main
+          # (92.86% of commands at #347); raise it when a PR lifts coverage
+          # (same policy as the Swift floors). Pester gates on command
+          # coverage, not the line figure in coverage-pester.xml.
+          $floor = 90
+          $cfg.CodeCoverage.CoveragePercentTarget = $floor
+          $cfg.Run.PassThru = $true
+          $r = Invoke-Pester -Configuration $cfg
+          # Run.Exit already failed the step if coverage is under the floor.
+          # The converse: a floor more than 5 points under measured has
+          # lagged a lift; raise it in the PR that lifted it.
+          $pct = [math]::Round($r.CodeCoverage.CoveragePercent, 2)
+          Write-Host "HotshotCapture.psm1: $pct% (floor $floor%)"
+          if ($pct - $floor -gt 5) {
+            Write-Host "::error::Pester floor $floor% lags measured $pct% by more than 5 points; raise the floor in this PR"
+            exit 1
+          }
       - name: Upload Pester coverage report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

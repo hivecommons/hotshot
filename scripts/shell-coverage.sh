@@ -9,6 +9,10 @@
 # Floors (percent) are overridable: HOTSHOT_FLOOR_CAPTURE, HOTSHOT_FLOOR_INSTALL,
 # HOTSHOT_FLOOR_BUNDLE, HOTSHOT_FLOOR_SMOKE, HOTSHOT_FLOOR_RUNBOOK_EVENTS.
 #
+# Also fails when a shell script escapes the gates: every *.sh in the repo
+# must be in SUITES (test suites) or GATED (scripts with a floor), and on
+# the shellcheck line of .github/workflows/ci.yml.
+#
 # Usage: bash scripts/shell-coverage.sh
 set -euo pipefail
 
@@ -62,7 +66,26 @@ if [ "$got" != "$want" ]; then
     exit 1
 fi
 
-for suite in linux/tests/hotshot-capture.test.sh linux/tests/install.test.sh scripts/tests/bundle.test.sh scripts/tests/smoke.test.sh scripts/tests/runbook-events.test.sh; do
+# The suites to run and the scripts they gate, with each script's floor.
+# Add a new script to GATED (and its suite to SUITES) or the completeness
+# check below fails: these lists are the only thing that puts a script
+# under lint and coverage, and nothing else notices when one is left out.
+SUITES=(
+    linux/tests/hotshot-capture.test.sh
+    linux/tests/install.test.sh
+    scripts/tests/bundle.test.sh
+    scripts/tests/smoke.test.sh
+    scripts/tests/runbook-events.test.sh
+)
+GATED=(
+    "linux/hotshot-capture.sh $FLOOR_CAPTURE"
+    "linux/install.sh $FLOOR_INSTALL"
+    "scripts/bundle.sh $FLOOR_BUNDLE"
+    "scripts/smoke.sh $FLOOR_SMOKE"
+    "scripts/runbook-events.sh $FLOOR_RUNBOOK_EVENTS"
+)
+
+for suite in "${SUITES[@]}"; do
     echo "== $suite"
     bash "$ROOT/$suite"
 done
@@ -218,10 +241,75 @@ if (ROOT="$WORK/floor"; WORK="$ROOT"; report four.sh 69 >/dev/null; exit "$STATU
     exit 1
 fi
 
+# Prints one line per shell script under $1 that the gates do not reach:
+# a */tests/*.test.sh missing from SUITES, any other *.sh missing from GATED
+# (this runner excepted: it is the harness, self-tested above), and any *.sh
+# absent from the shellcheck line of .github/workflows/ci.yml. The Swift
+# gate fails on "module not present in coverage export"; this is the shell
+# equivalent, since a script left out of these lists is otherwise unlinted
+# and unmeasured while every gate stays green.
+ungated_scripts() { # $1 = repo root
+    local root="$1" lint f rel entry found
+    lint="$(grep -E '^[[:space:]]*run: shellcheck ' "$root/.github/workflows/ci.yml" 2>/dev/null || true)"
+    while IFS= read -r f; do
+        rel="${f#"$root"/}"
+        found=0
+        case "$rel" in
+            scripts/shell-coverage.sh) found=1 ;;
+            */tests/*.test.sh)
+                for entry in "${SUITES[@]}"; do
+                    [ "$entry" = "$rel" ] && found=1
+                done
+                [ "$found" -eq 1 ] || echo "  ungated: $rel is not in SUITES"
+                ;;
+            *)
+                for entry in "${GATED[@]}"; do
+                    [ "${entry%% *}" = "$rel" ] && found=1
+                done
+                [ "$found" -eq 1 ] || echo "  ungated: $rel is not in GATED (no coverage floor)"
+                ;;
+        esac
+        case " $lint " in
+            *" $rel "*) ;;
+            *) echo "  unlinted: $rel is not on the shellcheck line of .github/workflows/ci.yml" ;;
+        esac
+    done < <(find "$root" -name '*.sh' -type f -not -path '*/.git/*' -not -path '*/.build/*' | sort)
+}
+
+# Guard the completeness check: a stray script, a stray suite and a gated
+# script missing from the shellcheck line must each be named, and the
+# registered ones must not be.
+mkdir -p "$WORK/tree/.github/workflows" "$WORK/tree/scripts/tests" "$WORK/tree/linux/tests" "$WORK/tree/.build/x"
+for f in scripts/shell-coverage.sh scripts/ok.sh scripts/stray.sh scripts/tests/ok.test.sh \
+    scripts/tests/stray.test.sh linux/unlinted.sh linux/tests/unlinted.test.sh .build/x/dep.sh; do
+    echo ':' >"$WORK/tree/$f"
+done
+printf '%s\n' 'steps:' '  - name: shellcheck' \
+    '    run: shellcheck -S warning scripts/shell-coverage.sh scripts/ok.sh scripts/stray.sh scripts/tests/ok.test.sh scripts/tests/stray.test.sh' \
+    >"$WORK/tree/.github/workflows/ci.yml"
+got="$(SUITES=(scripts/tests/ok.test.sh linux/tests/unlinted.test.sh); GATED=("scripts/ok.sh 95" "linux/unlinted.sh 95"); ungated_scripts "$WORK/tree")"
+want="$(printf '%s\n' \
+    '  unlinted: linux/tests/unlinted.test.sh is not on the shellcheck line of .github/workflows/ci.yml' \
+    '  unlinted: linux/unlinted.sh is not on the shellcheck line of .github/workflows/ci.yml' \
+    '  ungated: scripts/stray.sh is not in GATED (no coverage floor)' \
+    '  ungated: scripts/tests/stray.test.sh is not in SUITES')"
+if [ "$got" != "$want" ]; then
+    echo "FAIL shell-coverage self-test: ungated_scripts gave:" >&2
+    echo "$got" >&2
+    exit 1
+fi
+
+echo "== shell gate completeness"
+if missing="$(ungated_scripts "$ROOT")" && [ -n "$missing" ]; then
+    echo "$missing"
+    echo "FAIL gate completeness: add the scripts above to SUITES/GATED here and to the shellcheck line in .github/workflows/ci.yml"
+    STATUS=1
+else
+    echo "ok   every *.sh is in SUITES or GATED and on the shellcheck line"
+fi
+
 echo "== shell coverage"
-report linux/hotshot-capture.sh "$FLOOR_CAPTURE"
-report linux/install.sh "$FLOOR_INSTALL"
-report scripts/bundle.sh "$FLOOR_BUNDLE"
-report scripts/smoke.sh "$FLOOR_SMOKE"
-report scripts/runbook-events.sh "$FLOOR_RUNBOOK_EVENTS"
+for entry in "${GATED[@]}"; do
+    report "${entry%% *}" "${entry##* }"
+done
 exit "$STATUS"

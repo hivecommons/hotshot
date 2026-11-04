@@ -248,8 +248,17 @@ fi
 # gate fails on "module not present in coverage export"; this is the shell
 # equivalent, since a script left out of these lists is otherwise unlinted
 # and unmeasured while every gate stays green.
+#
+# Constraint on ci.yml: the shellcheck step must stay a single-line
+# `run: shellcheck ... <explicit script list>` so the grep below can read it.
+# If that step is ever rewritten as a `run: |` block or to discover scripts
+# itself (e.g. `git ls-files -z '*.sh' | xargs -0 shellcheck -S warning`, the
+# simplification proposed on #353), every script would be reported here as
+# unlinted although all are linted; in that case drop the "unlinted" check
+# (the `lint` lookup and its case below), since discovery makes it redundant.
 ungated_scripts() { # $1 = repo root
     local root="$1" lint f rel entry found
+    # Single explicit-list line only; see the constraint note above.
     lint="$(grep -E '^[[:space:]]*run: shellcheck ' "$root/.github/workflows/ci.yml" 2>/dev/null || true)"
     while IFS= read -r f; do
         rel="${f#"$root"/}"
@@ -302,7 +311,7 @@ fi
 echo "== shell gate completeness"
 if missing="$(ungated_scripts "$ROOT")" && [ -n "$missing" ]; then
     echo "$missing"
-    echo "FAIL gate completeness: add the scripts above to SUITES/GATED here and to the shellcheck line in .github/workflows/ci.yml"
+    echo "FAIL gate completeness: add the scripts above to SUITES (*.test.sh) or GATED (with a floor) here and to the single-line shellcheck step in .github/workflows/ci.yml (if every script is listed, that step was reflowed or rewritten; see the note on ungated_scripts)"
     STATUS=1
 else
     echo "ok   every *.sh is in SUITES or GATED and on the shellcheck line"

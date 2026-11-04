@@ -178,24 +178,31 @@ report() { # $1 = repo-relative script, $2 = floor
     if [ "$pct" -lt "$floor" ]; then
         echo "FAIL $script: $pct% ($covered/$total) is below the $floor% floor"
         STATUS=1
+    elif [ $((pct - floor)) -gt 5 ]; then
+        echo "FAIL $script: floor $floor% lags measured $pct% by more than 5 points; raise the floor"
+        STATUS=1
     else
         echo "ok   $script: $pct% ($covered/$total), floor $floor%"
     fi
 }
 
-# Guard the floor arithmetic: every gated script sits at 100% on main, so CI
-# only ever takes the ok branch. Run in a subshell so ROOT/WORK/STATUS can be
-# pointed at a fixture without touching the real run.
+# Guard the floor arithmetic: every gated script sits at 100% on main with a
+# 95% floor, so CI only ever takes the ok branch. Run in a subshell so
+# ROOT/WORK/STATUS can be pointed at a fixture without touching the real run.
 mkdir -p "$WORK/floor"
 printf '%s\n' 'a=1' 'b=2' 'c=3' 'd=4' >"$WORK/floor/four.sh"
 printf '%s\n' '#!/usr/bin/env bash' '# nothing runs' >"$WORK/floor/empty.sh"
 printf '%s\n' 'four.sh:1' 'four.sh:2' 'four.sh:4' >"$WORK/floor/hits"
-got="$(ROOT="$WORK/floor"; WORK="$ROOT"; report four.sh 75; report four.sh 76; report empty.sh 0)"
+got="$(ROOT="$WORK/floor"; WORK="$ROOT"; report four.sh 75; report four.sh 76; report four.sh 70; report four.sh 69; report empty.sh 0)"
 want="$(printf '%s\n' \
     '  uncovered: four.sh:3' \
     'ok   four.sh: 75% (3/4), floor 75%' \
     '  uncovered: four.sh:3' \
     'FAIL four.sh: 75% (3/4) is below the 76% floor' \
+    '  uncovered: four.sh:3' \
+    'ok   four.sh: 75% (3/4), floor 70%' \
+    '  uncovered: four.sh:3' \
+    'FAIL four.sh: floor 69% lags measured 75% by more than 5 points; raise the floor' \
     'FAIL empty.sh: no executable lines found')"
 if [ "$got" != "$want" ]; then
     echo "FAIL shell-coverage self-test: report gave:" >&2
@@ -204,6 +211,10 @@ if [ "$got" != "$want" ]; then
 fi
 if (ROOT="$WORK/floor"; WORK="$ROOT"; report four.sh 76 >/dev/null; exit "$STATUS"); then
     echo "FAIL shell-coverage self-test: report did not set STATUS on a floor miss" >&2
+    exit 1
+fi
+if (ROOT="$WORK/floor"; WORK="$ROOT"; report four.sh 69 >/dev/null; exit "$STATUS"); then
+    echo "FAIL shell-coverage self-test: report did not set STATUS on a lagging floor" >&2
     exit 1
 fi
 

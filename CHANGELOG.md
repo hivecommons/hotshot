@@ -4,6 +4,10 @@ All notable changes to hotshot are documented in this file. The format is based 
 
 ## [Unreleased]
 
+### Changed
+
+- CI: the Swift, Pester and shell coverage gates now also fail when a floor lags the measured figure by more than 5 points, telling the author to raise the floor in the same PR; the Pester floor for `windows/HotshotCapture.psm1` rises from 88% to 90% (#348).
+
 ### Fixed
 
 - Guard: `scripts/runbook-events.sh` now keeps its reverse-DNS exclusion list in a documented `REVERSE_DNS_TLDS` variable (adding `co`, `uk`, `de`) and fails if an excluded prefix collides with an emitted event category, so the list can neither misclassify identifiers nor hide a real event (#345).

@@ -1,0 +1,30 @@
+# FOSSA CLI configuration for hivecommons/hotshot.
+# Reference: https://github.com/fossas/fossa-cli/blob/master/docs/references/files/fossa-yml.md
+version: 3
+
+project:
+  # Stable project name in the CNCF FOSSA org (the action's `project:` input
+  # mirrors this so UI and CI agree).
+  name: hivecommons/hotshot
+  # Team NAME in the CNCF FOSSA org (team id 207492). Only applied when the
+  # project is first created; later changes must be made in the FOSSA UI.
+  team: Hive Commons
+  url: https://github.com/hivecommons/hotshot
+
+# Swift package at the repo root (Package.swift, the macOS app). The Linux and
+# Windows ports are dependency-free shell/PowerShell scripts. FOSSA
+# auto-discovers every manifest; pin the shipped package explicitly so a future
+# re-layout does not silently drop it.
+targets:
+  only:
+    - type: swift
+      path: .
+
+paths:
+  exclude:
+    - Tests
+    - scripts
+    - linux
+    - windows
+    - runbooks
+    - resources

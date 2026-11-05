@@ -52,23 +52,25 @@ trap 'rm -rf "$TMP"' EXIT
 STUBS="$TMP/stubs"
 NODEFAULTS="$TMP/nodefaults"
 LOG="$TMP/calls.log"
-STORE="$TMP/defaults.store"
-mkdir -p "$STUBS" "$NODEFAULTS"
+STORE_DIR="$TMP/defaults.store"
+STORE="$STORE_DIR/hotshotScreenshotDir"
+mkdir -p "$STUBS" "$NODEFAULTS" "$STORE_DIR"
 
 REAL_CP="$(command -v cp)"
 REAL_SLEEP="$(command -v sleep)"
 
-# defaults stub: one-key store in $STORE; logs every call.
+# defaults stub: one file per key in $STORE_DIR; logs every call. The value
+# of a write is its last argument (so `-bool true` stores "true").
 cat >"$STUBS/defaults" <<EOF
 #!/usr/bin/env bash
 echo "defaults \$*" >>"$LOG"
 case "\$1" in
     read)
-        [ -f "$STORE" ] || exit 1
-        cat "$STORE"
+        [ -f "$STORE_DIR/\$3" ] || exit 1
+        cat "$STORE_DIR/\$3"
         ;;
-    write) printf '%s' "\$4" >"$STORE" ;;
-    delete) rm -f "$STORE" ;;
+    write) printf '%s' "\${@: -1}" >"$STORE_DIR/\$3" ;;
+    delete) rm -f "$STORE_DIR/\$3" ;;
 esac
 EOF
 
@@ -117,7 +119,7 @@ run_smoke() { # $1 = project dir; $2 = PATH prefix
 PROJ="$TMP/proj"
 make_project "$PROJ"
 : >"$LOG"
-rm -f "$STORE"
+rm -f "$STORE_DIR"/*
 out="$(run_smoke "$PROJ" "$STUBS" 2>&1)"
 rc=$?
 assert_eq "healthy: exit 0" "0" "$rc"
@@ -139,10 +141,30 @@ assert_eq "restore: exit 0" "0" "$rc"
 assert_eq "restore: previous preference written back" "/previous/dir" "$(cat "$STORE")"
 
 # ==============================================================================
+# the watch prefs are pinned on for the launch and restored afterwards
+# ==============================================================================
+: >"$LOG"
+rm -f "$STORE_DIR"/*
+printf '0' >"$STORE_DIR/hotshotAutoWatch"
+out="$(run_smoke "$PROJ" "$STUBS" 2>&1)"
+rc=$?
+assert_eq "watch prefs: exit 0" "0" "$rc"
+grep -q "^defaults write io.hivecommons.hotshot hotshotAutoWatch -bool true" "$LOG"
+check "watch prefs: auto-watch pinned on" $?
+grep -q "^defaults write io.hivecommons.hotshot hotshotClipboardWatch -bool true" "$LOG"
+check "watch prefs: clipboard-watch pinned on" $?
+assert_eq "watch prefs: previous auto-watch value restored" "false" "$(cat "$STORE_DIR/hotshotAutoWatch")"
+if [ -f "$STORE_DIR/hotshotClipboardWatch" ]; then check "watch prefs: unset clipboard-watch deleted" 1; else check "watch prefs: unset clipboard-watch deleted" 0; fi
+first_pin="$(grep -n "^defaults write io.hivecommons.hotshot hotshotAutoWatch -bool true" "$LOG" | head -1 | cut -d: -f1)"
+restore="$(grep -n "^defaults write io.hivecommons.hotshot hotshotAutoWatch -bool false" "$LOG" | head -1 | cut -d: -f1)"
+[ -n "$first_pin" ] && [ -n "$restore" ] && [ "$first_pin" -lt "$restore" ]
+check "watch prefs: pinned before the restore" $?
+
+# ==============================================================================
 # a missing diagnostic fails and prints the app log
 # ==============================================================================
 : >"$LOG"
-rm -f "$STORE"
+rm -f "$STORE_DIR"/*
 out="$(STUB_EVENTS="app.launched watcher.started" run_smoke "$PROJ" "$STUBS" 2>&1)"
 rc=$?
 if [ "$rc" -ne 0 ]; then check "missing event: non-zero exit" 0; else check "missing event: non-zero exit" 1; fi

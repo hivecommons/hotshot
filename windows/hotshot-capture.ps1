@@ -52,7 +52,11 @@ if (-not $img) { Fail 'capture cancelled or timed out (no image appeared on the 
 
 # --- 2. save PNG + multi-format clipboard -------------------------------------
 $Dir = Resolve-HotshotDirectory -Dir $Dir
-New-Item -ItemType Directory -Force -Path $Dir | Out-Null
+try {
+    New-Item -ItemType Directory -Force -Path $Dir | Out-Null
+} catch {
+    Fail "cannot create screenshot directory $(Get-RedactedPath -Path $Dir) ($($_.Exception.GetBaseException().GetType().Name))"
+}
 try {
     $shotPath = Get-HotshotShotPath -Dir $Dir
 } catch {

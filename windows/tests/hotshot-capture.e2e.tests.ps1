@@ -324,9 +324,9 @@ Describe 'hotshot-capture.ps1' {
 
     Context 'screenshot directory cannot be created' {
         BeforeEach {
-            # A file at -Dir makes the real New-Item fail, without relying on ACLs.
-            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $script:ShotDir) | Out-Null
-            Set-Content -LiteralPath $script:ShotDir -Value 'blocking-file'
+            # Block an intermediate directory: -Force silently accepts a file
+            # at -Dir itself, but cannot create a directory beneath a file.
+            Set-Content -LiteralPath (Split-Path -Parent $script:ShotDir) -Value 'blocking-file'
             $script:Result = Invoke-CaptureScript -Arguments "-Dir `"$script:ShotDir`"" -WithImage
         }
 
@@ -339,7 +339,9 @@ Describe 'hotshot-capture.ps1' {
         It 'does not leak the screenshot folder path or the .NET message into the error' {
             $unwrapped = $script:Result.Stderr -replace '\r?\n\s*(\|\s?)?', ''
             $unwrapped | Should -Not -Match ([regex]::Escape($script:ShotDir))
-            $unwrapped | Should -Not -Match ([regex]::Escape((Split-Path -Leaf $script:TempRoot)))
+            # PowerShell's error header includes the script in TempRoot;
+            # the blocking parent path must still be redacted from the message.
+            $unwrapped | Should -Not -Match ([regex]::Escape((Split-Path -Parent $script:ShotDir)))
             $unwrapped | Should -Not -Match 'already\s*exists'
         }
 
@@ -350,8 +352,7 @@ Describe 'hotshot-capture.ps1' {
     }
 
     It 'shows the folder in the directory creation error when HOTSHOT_VERBOSE_LOGGING=1' {
-        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $script:ShotDir) | Out-Null
-        Set-Content -LiteralPath $script:ShotDir -Value 'blocking-file'
+        Set-Content -LiteralPath (Split-Path -Parent $script:ShotDir) -Value 'blocking-file'
         $env:HOTSHOT_VERBOSE_LOGGING = '1'
         $result = Invoke-CaptureScript -Arguments "-Dir `"$script:ShotDir`"" -WithImage
         $result.ExitCode | Should -Be 1

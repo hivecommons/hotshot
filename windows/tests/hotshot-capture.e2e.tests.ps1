@@ -322,11 +322,26 @@ Describe 'hotshot-capture.ps1' {
         }
     }
 
-    Context 'screenshot directory cannot be created' {
+    It 'accepts an existing screenshot directory and preserves its contents' {
+        New-Item -ItemType Directory -Force -Path $script:ShotDir | Out-Null
+        $existingFile = Join-Path $script:ShotDir 'existing.png'
+        Set-Content -LiteralPath $existingFile -Value 'existing-screenshot'
+        $result = Invoke-CaptureScript -Arguments "-Dir `"$script:ShotDir`"" -WithImage
+        $result.ExitCode | Should -Be 0 -Because $result.Stderr
+        $result.Stdout[-1] | Should -Be $script:ExpectedShot
+        Test-Path -LiteralPath $script:ExpectedShot | Should -BeTrue
+        Get-Content -LiteralPath $existingFile | Should -Be 'existing-screenshot'
+    }
+
+    Context 'screenshot directory cannot be created (block parent: <BlockParent>)' -ForEach @(
+        @{ BlockParent = $true }
+        @{ BlockParent = $false }
+    ) {
         BeforeEach {
-            # Block an intermediate directory: -Force silently accepts a file
-            # at -Dir itself, but cannot create a directory beneath a file.
-            Set-Content -LiteralPath (Split-Path -Parent $script:ShotDir) -Value 'blocking-file'
+            # Exercise real filesystem failures both at -Dir and in its parent.
+            $script:BlockingPath = if ($BlockParent) { Split-Path -Parent $script:ShotDir } else { $script:ShotDir }
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $script:BlockingPath) | Out-Null
+            Set-Content -LiteralPath $script:BlockingPath -Value 'blocking-file'
             $script:Result = Invoke-CaptureScript -Arguments "-Dir `"$script:ShotDir`"" -WithImage
         }
 
@@ -341,7 +356,7 @@ Describe 'hotshot-capture.ps1' {
             $unwrapped | Should -Not -Match ([regex]::Escape($script:ShotDir))
             # PowerShell's error header includes the script in TempRoot;
             # the blocking parent path must still be redacted from the message.
-            $unwrapped | Should -Not -Match ([regex]::Escape((Split-Path -Parent $script:ShotDir)))
+            $unwrapped | Should -Not -Match ([regex]::Escape($script:BlockingPath))
             $unwrapped | Should -Not -Match 'already\s*exists'
         }
 

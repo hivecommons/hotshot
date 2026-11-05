@@ -53,7 +53,9 @@ if (-not $img) { Fail 'capture cancelled or timed out (no image appeared on the 
 # --- 2. save PNG + multi-format clipboard -------------------------------------
 $Dir = Resolve-HotshotDirectory -Dir $Dir
 try {
-    New-Item -ItemType Directory -Force -Path $Dir | Out-Null
+    # New-Item -Force suppresses some IOExceptions, including a parent that
+    # is a file. CreateDirectory accepts existing folders but throws on failure.
+    [System.IO.Directory]::CreateDirectory($Dir) | Out-Null
 } catch {
     Fail "cannot create screenshot directory $(Get-RedactedPath -Path $Dir) ($($_.Exception.GetBaseException().GetType().Name))"
 }

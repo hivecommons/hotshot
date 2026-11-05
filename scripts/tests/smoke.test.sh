@@ -157,8 +157,11 @@ assert_eq "watch prefs: previous auto-watch value restored" "false" "$(cat "$STO
 if [ -f "$STORE_DIR/hotshotClipboardWatch" ]; then check "watch prefs: unset clipboard-watch deleted" 1; else check "watch prefs: unset clipboard-watch deleted" 0; fi
 first_pin="$(grep -n "^defaults write io.hivecommons.hotshot hotshotAutoWatch -bool true" "$LOG" | head -1 | cut -d: -f1)"
 restore="$(grep -n "^defaults write io.hivecommons.hotshot hotshotAutoWatch -bool false" "$LOG" | head -1 | cut -d: -f1)"
-[ -n "$first_pin" ] && [ -n "$restore" ] && [ "$first_pin" -lt "$restore" ]
-check "watch prefs: pinned before the restore" $?
+if [ -n "$first_pin" ] && [ -n "$restore" ] && [ "$first_pin" -lt "$restore" ]; then
+    check "watch prefs: pinned before the restore" 0
+else
+    check "watch prefs: pinned before the restore" 1
+fi
 
 # ==============================================================================
 # a missing diagnostic fails and prints the app log

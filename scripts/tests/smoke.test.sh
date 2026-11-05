@@ -164,6 +164,21 @@ else
 fi
 
 # ==============================================================================
+# a watch pref that was already on is written back as true, not deleted
+# ==============================================================================
+: >"$LOG"
+rm -f "$STORE_DIR"/*
+printf '1' >"$STORE_DIR/hotshotClipboardWatch"
+out="$(run_smoke "$PROJ" "$STUBS" 2>&1)"
+rc=$?
+assert_eq "watch pref on: exit 0" "0" "$rc"
+assert_eq "watch pref on: clipboard-watch written as -bool true twice (pin, then restore)" "2" \
+    "$(grep -c "^defaults write io.hivecommons.hotshot hotshotClipboardWatch -bool true" "$LOG")"
+if grep -q "^defaults write io.hivecommons.hotshot hotshotClipboardWatch -bool false" "$LOG"; then check "watch pref on: never written as -bool false" 1; else check "watch pref on: never written as -bool false" 0; fi
+if grep -q "^defaults delete io.hivecommons.hotshot hotshotClipboardWatch" "$LOG"; then check "watch pref on: not deleted" 1; else check "watch pref on: not deleted" 0; fi
+assert_eq "watch pref on: clipboard-watch left on" "true" "$(cat "$STORE_DIR/hotshotClipboardWatch")"
+
+# ==============================================================================
 # a missing diagnostic fails and prints the app log
 # ==============================================================================
 : >"$LOG"

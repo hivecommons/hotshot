@@ -142,7 +142,7 @@ Click the camera icon in your menu bar. Everything is configurable:
 
 | Option | Default | What it does |
 |--------|---------|--------------|
-| **Auto-focus terminal** | On | Brings your terminal to the front after pasting the path |
+| **Auto-focus terminal** | On | With iTerm2, Off writes the text without changing focus; every other terminal (and Ctrl-V clipboard injection) is always brought forward first because System Events keystrokes require the target to be frontmost |
 | **Auto-press Return** | Off | Sends Enter after the path (so your CLI processes it immediately) |
 | **Show notifications** | Off | Desktop notification after each capture |
 | **Auto-inject new screenshots (file)** | On | Watches your screenshot folder for new files and auto-injects the path |

@@ -9,6 +9,9 @@ contact_links:
   - name: Watch the hive live on Twitch
     url: https://www.twitch.tv/hivecommons
     about: Live stream of the hosted hive's Activity Monitor — see issues and PRs move through the pipeline in real time.
+  - name: Join the community meeting
+    url: https://docs.hivecommons.dev/docs/community/meetings
+    about: Public Hive Commons meeting every other Thursday — schedule, join link, agenda and calendar.
   - name: Propose a project to join Hive Commons
     url: https://github.com/hivecommons/.github/issues/new?template=join-hive-commons.yml
     about: Project proposals for the Hive Commons family are handled in the hivecommons/.github repository.

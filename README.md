@@ -216,7 +216,7 @@ A small Swift package (`HotshotCore` for pure logic, `HotshotApp` for the watche
 - **Where it's heading:** [ROADMAP.md](ROADMAP.md) lists near-term work: package distribution, cross-platform parity, and more terminal and AI CLI targets.
 - **Report a problem or ask for support:** open a [bug report](https://github.com/hivecommons/hotshot/issues/new?template=bug_report.yml), a [terminal or AI CLI support request](https://github.com/hivecommons/hotshot/issues/new?template=target_request.yml), or a [feature request](https://github.com/hivecommons/hotshot/issues/new?template=feature_request.yml).
 - **Security:** please don't file vulnerabilities as public issues. Follow [SECURITY.md](SECURITY.md).
-- **Chat:** ask setup and contributor questions in the [Hive Commons Discord](https://hivecommons.dev/discord), or watch the hive live on [Twitch](https://www.twitch.tv/hivecommons).
+- **Chat:** ask setup and contributor questions in the [Hive Commons Discord](https://hivecommons.dev/discord), or watch the hive live on [Twitch](https://www.twitch.tv/hivecommons). To talk to the maintainers live, join the biweekly [Hive Commons community meeting](https://docs.hivecommons.dev/docs/community/meetings).
 - **Code of Conduct:** hotshot follows the [Hive Commons Code of Conduct](https://github.com/hivecommons/.github/blob/main/CODE_OF_CONDUCT.md).
 
 ## License

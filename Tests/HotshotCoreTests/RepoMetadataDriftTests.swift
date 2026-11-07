@@ -183,6 +183,29 @@ final class RepoMetadataDriftTests: XCTestCase {
         XCTAssertGreaterThan(linked, 0, "expected the forms to link SECURITY.md / ROADMAP.md / the runbook")
     }
 
+    // MARK: - community links
+
+    /// Hive Commons community entry points, kept in step with the
+    /// hivecommons/hive README Community line.
+    private static let communityLinks: [(name: String, url: String)] = [
+        ("Discord", "https://hivecommons.dev/discord"),
+        ("Twitch live stream", "https://www.twitch.tv/hivecommons"),
+        ("community meeting", "https://docs.hivecommons.dev/docs/community/meetings"),
+    ]
+
+    func testReadmeAndIssueChooserLinkEveryCommunityChannel() throws {
+        let readme = try repoText("README.md")
+        let chooserURLs = try captures(
+            "^ +url:[ \\t]*(\\S+)$", in: try repoText(".github/ISSUE_TEMPLATE/config.yml"),
+            options: .anchorsMatchLines)
+        for link in Self.communityLinks {
+            XCTAssertTrue(readme.contains("](\(link.url))"), "README.md does not link the \(link.name) (\(link.url))")
+            XCTAssertTrue(
+                chooserURLs.contains(link.url),
+                ".github/ISSUE_TEMPLATE/config.yml does not link the \(link.name) (\(link.url))")
+        }
+    }
+
     // MARK: - OWNERS
 
     func testOwnersListsValidApproversAndReviewers() throws {

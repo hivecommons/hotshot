@@ -156,9 +156,32 @@ unique_shot_path() { # $1 = directory, $2 = timestamp; echoes a path it just res
     printf '%s' "$path"
 }
 
+# %3N is a GNU date extension. busybox date (Alpine/postmarketOS build it
+# without FEATURE_DATE_NANO) plus musl strftime stop at the unknown %N and
+# yield "YYYYMMDD-HHMMSS-", so accept the result only when it is complete and
+# otherwise add the milliseconds ourselves ("000" when bash has no
+# $EPOCHREALTIME, i.e. bash < 5).
+shot_timestamp() {
+    local ts frac
+    ts="$(date +%Y%m%d-%H%M%S-%3N)"
+    case "$ts" in
+        [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9])
+            printf '%s' "$ts"
+            return
+            ;;
+    esac
+    frac="${EPOCHREALTIME-}"
+    frac="${frac#*[.,]}"
+    case "$frac" in
+        [0-9][0-9][0-9]*) frac="${frac:0:3}" ;;
+        *) frac=000 ;;
+    esac
+    printf '%s-%s' "$(date +%Y%m%d-%H%M%S)" "$frac"
+}
+
 SHOT_DIR="$(normalize_shot_dir "$SHOT_DIR")"
 mkdir -p "$SHOT_DIR" || die "cannot create screenshot directory $(redact "$SHOT_DIR")"
-SHOT_PATH="$(unique_shot_path "$SHOT_DIR" "$(date +%Y%m%d-%H%M%S-%3N)")" ||
+SHOT_PATH="$(unique_shot_path "$SHOT_DIR" "$(shot_timestamp)")" ||
     die "cannot reserve a screenshot file in $(redact "$SHOT_DIR")"
 # Drop the empty reservation if the capture fails or is cancelled.
 trap '[ -s "$SHOT_PATH" ] || rm -f "$SHOT_PATH"' EXIT

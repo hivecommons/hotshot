@@ -1091,6 +1091,22 @@ assert_eq "e2e same-instant captures: second gets a -1 suffix" \
 ok=1; [ -s "$shot1" ] && [ -s "$shot2" ] && ok=0
 check "e2e same-instant captures: both files exist" "$ok"
 
+# busybox/musl date has no %3N and echoes a truncated "...-" timestamp -> the
+# name must still carry three millisecond digits and no trailing dash.
+BBDATE="$TMP/busyboxdate"
+mkdir -p "$BBDATE"
+cp "$STUBS/maim" "$STUBS/xclip" "$STUBS/xdotool" "$BBDATE/"
+printf '#!/usr/bin/env bash\ncase "$1" in *%%3N) echo 20260304-050607- ;; *) echo 20260304-050607 ;; esac\n' >"$BBDATE/date"
+chmod +x "$BBDATE/date"
+rm -rf "$TMP/bbshots"
+shot="$(env -i BASH_ENV="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" DISPLAY=:99 PATH="$BBDATE:/usr/bin:/bin" \
+    HOTSHOT_DIR="$TMP/bbshots" HOTSHOT_TEST_FOCUS_PID="$plain_root" bash "$SCRIPT" --full --no-type 2>/dev/null)"
+case "$shot" in
+    "$TMP/bbshots/hotshot-20260304-050607-"[0-9][0-9][0-9].png) ok=0 ;;
+    *) ok=1 ;;
+esac
+check "e2e date without %3N: name keeps three millisecond digits ($shot)" "$ok"
+
 # Wayland without wl-copy -> install hint for wl-clipboard, typing still works.
 NOWLCOPY="$TMP/nowlcopy"
 mkdir -p "$NOWLCOPY"

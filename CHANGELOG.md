@@ -10,6 +10,7 @@ All notable changes to hotshot are documented in this file. The format is based 
 
 ### Fixed
 
+- Linux: the screenshot name keeps its milliseconds on busybox `date` (Alpine/postmarketOS), where `%3N` is unsupported and used to produce `hotshot-YYYYMMDD-HHMMSS-.png` (#368).
 - Guard: `scripts/runbook-events.sh` now keeps its reverse-DNS exclusion list in a documented `REVERSE_DNS_TLDS` variable (adding `co`, `uk`, `de`) and fails if an excluded prefix collides with an emitted event category, so the list can neither misclassify identifiers nor hide a real event (#345).
 - Runbooks: `runbooks/injection-failure.md` now documents the `injection.iterm2` and `injection.iterm2.script` diagnostic events emitted by iTerm2 injection on macOS, so operators triaging iTerm2 captures have event entries in the runbook.
 - Guard: `scripts/runbook-events.sh` now recognises event names with digits (e.g. `iterm2`) and more than two segments (e.g. `injection.iterm2.script`) so the runbook/source guard can validate them, matching the documented events in the runbooks.

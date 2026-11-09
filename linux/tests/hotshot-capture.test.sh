@@ -1107,6 +1107,17 @@ case "$shot" in
 esac
 check "e2e date without %3N: name keeps three millisecond digits ($shot)" "$ok"
 
+# Same busybox date on bash < 5, which has no $EPOCHREALTIME: the fallback
+# pads with "000" rather than leaving the milliseconds empty. Unsetting the
+# special variable in the startup rc is how bash 5 loses it.
+NOEPOCHRC="$TMP/noepoch.rc"
+printf '[ -n "${HOTSHOT_COVERAGE_RC:-}" ] && . "$HOTSHOT_COVERAGE_RC"\nunset EPOCHREALTIME\n' >"$NOEPOCHRC"
+rm -rf "$TMP/bbshots"
+shot="$(env -i BASH_ENV="$NOEPOCHRC" HOTSHOT_COVERAGE_RC="${HOTSHOT_COVERAGE_RC:-}" HOME="$HOME" DISPLAY=:99 PATH="$BBDATE:/usr/bin:/bin" \
+    HOTSHOT_DIR="$TMP/bbshots" HOTSHOT_TEST_FOCUS_PID="$plain_root" bash "$SCRIPT" --full --no-type 2>/dev/null)"
+assert_eq "e2e date without %3N and no EPOCHREALTIME: milliseconds fall back to 000" \
+    "$TMP/bbshots/hotshot-20260304-050607-000.png" "$shot"
+
 # Wayland without wl-copy -> install hint for wl-clipboard, typing still works.
 NOWLCOPY="$TMP/nowlcopy"
 mkdir -p "$NOWLCOPY"

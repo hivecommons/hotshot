@@ -206,6 +206,26 @@ final class RepoMetadataDriftTests: XCTestCase {
         }
     }
 
+    /// CONTRIBUTING.md is where GitHub sends a would-be contributor, so it
+    /// must say what to pick up and where to ask, not only how to build.
+    func testContributingPointsAtStarterIssuesAndCommunityChannels() throws {
+        let contributing = try repoText("CONTRIBUTING.md")
+        for label in ["good+first+issue", "help+wanted"] {
+            XCTAssertTrue(
+                contributing.contains(
+                    "](https://github.com/hivecommons/hotshot/issues?q=is%3Aissue+is%3Aopen+label%3A%22\(label)%22)"),
+                "CONTRIBUTING.md does not link the open \(label.replacingOccurrences(of: "+", with: " ")) issues")
+        }
+        XCTAssertTrue(
+            contributing.contains("](https://github.com/hivecommons/hotshot/issues/new?template=target_request.yml)"),
+            "CONTRIBUTING.md does not link the terminal or AI CLI support request form")
+        XCTAssertTrue(repoFileExists(Self.targetRequestForm), "CONTRIBUTING.md links target_request.yml; it moved")
+        for link in Self.communityLinks where link.name != "Twitch live stream" {
+            XCTAssertTrue(
+                contributing.contains("](\(link.url))"), "CONTRIBUTING.md does not link the \(link.name) (\(link.url))")
+        }
+    }
+
     // MARK: - OWNERS
 
     func testOwnersListsValidApproversAndReviewers() throws {

@@ -16,6 +16,10 @@ public func normalizedMacOSScreenshotLocation(_ path: String?) -> String? {
     return (path as NSString).expandingTildeInPath
 }
 
+public func screenshotPickerDirectoryURL(_ path: String) -> URL {
+    URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+}
+
 public func macOSScreenshotLocation() -> String {
     // Authoritative: the same cfprefsd store `defaults read` prints, without
     // forking a process. Synchronizing drops this process's cached copy so an

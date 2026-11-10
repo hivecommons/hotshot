@@ -315,7 +315,7 @@ class HotshotAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.canCreateDirectories = true
         panel.prompt = "Choose"
         panel.message = "Select folder for hotshot screenshots"
-        panel.directoryURL = URL(fileURLWithPath: screenshotDir)
+        panel.directoryURL = screenshotPickerDirectoryURL(screenshotDir)
 
         if panel.runModal() == .OK, let url = panel.url {
             screenshotDir = url.path

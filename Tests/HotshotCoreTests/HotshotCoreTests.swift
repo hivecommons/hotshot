@@ -360,6 +360,11 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertNil(findMostRecentScreenshot(in: dir.path))
     }
 
+    func testScreenshotPickerDirectoryURLExpandsTilde() {
+        XCTAssertEqual(screenshotPickerDirectoryURL("~/x").path, NSHomeDirectory() + "/x")
+        XCTAssertEqual(screenshotPickerDirectoryURL("/abs/x").path, "/abs/x")
+    }
+
     func testMacOSScreenshotLocationNormalization() {
         XCTAssertNil(normalizedMacOSScreenshotLocation("\n \t"))
         XCTAssertEqual(normalizedMacOSScreenshotLocation("~/Pictures\n"), NSHomeDirectory() + "/Pictures")

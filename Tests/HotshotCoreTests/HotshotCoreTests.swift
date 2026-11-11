@@ -133,6 +133,22 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertEqual(findMostRecentScreenshot(in: dir.path), latestPNG.path)
     }
 
+    func testFindMostRecentScreenshotRecognisesHEICCaptures() throws {
+        let dir = try makeDirectory()
+        let olderPNG = try writeFile("Screenshot 2026-11-10 at 09.40.00.png", in: dir)
+        let newerHEIC = try writeFile("Screenshot 2026-11-10 at 09.41.12.heic", in: dir)
+        let newestUpperHEIC = try writeFile("Screenshot 2026-11-10 at 09.42.30.HEIC", in: dir)
+
+        try setModificationDate(Date(timeIntervalSince1970: 100), for: olderPNG)
+        try setModificationDate(Date(timeIntervalSince1970: 200), for: newerHEIC)
+        try setModificationDate(Date(timeIntervalSince1970: 300), for: newestUpperHEIC)
+
+        XCTAssertEqual(findMostRecentScreenshot(in: dir.path), newestUpperHEIC.path)
+
+        try FileManager.default.removeItem(at: newestUpperHEIC)
+        XCTAssertEqual(findMostRecentScreenshot(in: dir.path), newerHEIC.path)
+    }
+
     func testNewScreenshotFilesReturnsOnlyAdditions() {
         XCTAssertEqual(
             newScreenshotFiles(previous: ["old.png", "same.jpg"], current: ["same.jpg", "new.webp"]),

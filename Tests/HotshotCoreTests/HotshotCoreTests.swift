@@ -113,9 +113,11 @@ final class HotshotCoreTests: XCTestCase {
         try writeFile("one.png", in: dir)
         try writeFile("two.JPG", in: dir)
         try writeFile("three.webp", in: dir)
+        try writeFile("four.heic", in: dir)
+        try writeFile("five.HEIC", in: dir)
         try writeFile("notes.txt", in: dir)
 
-        XCTAssertEqual(snapshotScreenshotFiles(in: dir.path), ["one.png", "two.JPG", "three.webp"])
+        XCTAssertEqual(snapshotScreenshotFiles(in: dir.path), ["one.png", "two.JPG", "three.webp", "four.heic", "five.HEIC"])
     }
 
     func testFindMostRecentScreenshotIgnoresNonScreenshots() throws {

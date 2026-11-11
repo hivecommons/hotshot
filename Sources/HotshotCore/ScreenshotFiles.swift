@@ -1,6 +1,7 @@
 import Foundation
 
-public let SCREENSHOT_EXTENSIONS: Set<String> = ["png", "jpg", "jpeg", "tiff", "bmp", "gif", "webp"]
+/// Image formats `com.apple.screencapture type` can produce (png, jpg, tiff, bmp, gif, heic) plus common web formats (webp).
+public let SCREENSHOT_EXTENSIONS: Set<String> = ["png", "jpg", "jpeg", "tiff", "bmp", "gif", "webp", "heic"]
 public let WATCH_DEBOUNCE_SECONDS = 1.5
 /// How often the app re-checks that the watch is bound to the current
 /// screenshot folder (see `ScreenshotWatcher.reconcileDirectory`).

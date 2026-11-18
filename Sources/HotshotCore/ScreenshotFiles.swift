@@ -49,6 +49,11 @@ public func findMostRecentScreenshot(in dir: String) -> String? {
         let ext = (file as NSString).pathExtension.lowercased()
         guard SCREENSHOT_EXTENSIONS.contains(ext) else { continue }
         let fullPath = (dir as NSString).appendingPathComponent(file)
+        // Same exclusion as the watcher's newestInjectableScreenshot: a
+        // quarantined file was downloaded or received, not captured by the
+        // user, and this picks a path that gets typed into an AI session
+        // that will read it.
+        guard !isQuarantinedFile(atPath: fullPath) else { continue }
         guard let attrs = try? fm.attributesOfItem(atPath: fullPath),
               let modified = attrs[.modificationDate] as? Date else { continue }
         if modified > newestDate {

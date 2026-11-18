@@ -10,6 +10,7 @@ All notable changes to hotshot are documented in this file. The format is based 
 
 ### Fixed
 
+- macOS: **Inject last screenshot** now skips quarantined files (browser/Mail/Messages/AirDrop downloads) the same way watch mode already does, so it can no longer type the path of a received file into the AI CLI session instead of the user's own screenshot (#380).
 - macOS: watch mode and **Inject last screenshot** now recognise `.heic` captures, so users who set `defaults write com.apple.screencapture type heic` get their screenshots injected (#376).
 - macOS: **Change screenshot folder…** now expands a leading `~` in the configured screenshot folder, so the picker opens at the folder instead of a non-existent `~` path (#374).
 - Linux: the screenshot name keeps its milliseconds on busybox `date` (Alpine/postmarketOS), where `%3N` is unsupported and used to produce `hotshot-YYYYMMDD-HHMMSS-.png` (#368).

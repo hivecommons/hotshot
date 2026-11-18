@@ -149,6 +149,22 @@ final class HotshotCoreTests: XCTestCase {
         XCTAssertEqual(findMostRecentScreenshot(in: dir.path), newerHEIC.path)
     }
 
+    func testFindMostRecentScreenshotSkipsQuarantinedDownload() throws {
+        let dir = try makeDirectory()
+        let realShot = try writeFile("Screenshot 2026-11-10 at 09.40.00.png", in: dir)
+        let download = try writeFile("cute.png", in: dir)
+        try setQuarantine(on: download)
+
+        try setModificationDate(Date(timeIntervalSince1970: 100), for: realShot)
+        try setModificationDate(Date(timeIntervalSince1970: 200), for: download)
+
+        // The quarantined download is newer but must never win: it was not
+        // captured by the user, and this path gets typed into an AI session
+        // that will read it (same property newestInjectableScreenshot enforces
+        // for the automatic watcher).
+        XCTAssertEqual(findMostRecentScreenshot(in: dir.path), realShot.path)
+    }
+
     func testNewScreenshotFilesReturnsOnlyAdditions() {
         XCTAssertEqual(
             newScreenshotFiles(previous: ["old.png", "same.jpg"], current: ["same.jpg", "new.webp"]),

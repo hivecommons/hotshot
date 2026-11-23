@@ -1,0 +1,15 @@
+name: Contributing drift
+
+# Fails when a command this repo's CI runs is not mentioned in CONTRIBUTING.md
+# or README.md. Reusable gate from hivecommons/hive, pinned by commit SHA.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  contributing-drift:
+    uses: hivecommons/hive/.github/workflows/contributing-drift.yml@11942552493c20a300aa785c4359a98d227d18b0 # v5
